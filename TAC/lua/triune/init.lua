@@ -34,8 +34,8 @@ Triune Lua navigation guide
 local mq                = require('mq')
 local ImGui             = require('ImGui')
 local scriptDir         = debug.getinfo(1, "S").source:match("@?(.*[/\\])") or "./"
-package.path            = scriptDir .. "?.lua;" .. package.path
-local VERSION           = '3.4'
+package.path            = scriptDir .. "?.lua;" .. scriptDir .. "../?.lua;" .. package.path
+local VERSION           = '3.5'
 local open              = true
 -- File-backed diagnostic logger. Hooked into print() right away so every
 -- chat line from here on (core and plugins) is captured in its ring buffer;
@@ -101,6 +101,7 @@ do
     local paths = { mq.configDir .. '/triune_data.lua' }
     pcall(function()
         if scriptDir then table.insert(paths, scriptDir .. 'triune_data.lua') end
+        if scriptDir then table.insert(paths, scriptDir .. '../triune_data.lua') end
         if scriptDir then table.insert(paths, scriptDir .. '../config/triune_data.lua') end
         if mq.luaDir then table.insert(paths, mq.luaDir .. '/triune_data.lua') end
     end)
@@ -336,6 +337,7 @@ end
 -- on every character switch (onCharacterChanged).
 local function defaultCtrl()
     return {
+        class_count          = 3,    -- how many classes this character has (1-16, see runtime.MAX_CLASSES)
         plugins              = {},
         scripts              = {},
         running              = false,
@@ -434,6 +436,7 @@ local function defaultCtrl()
         pet_assist_at            = 100,
         pet_hold_enabled         = true,
         pet_names                = {},   -- cls -> pet name learned from that class's last summon (pet names are unique per player on this server)
+        pet_names_manual         = {},   -- cls -> pet name the player typed in (Settings -> Pet Names); authoritative: the class's pet is looked up by this name
         show_crit_floaters       = true,
         show_cooldowns           = false,
         show_spellbook           = false,
@@ -793,6 +796,145 @@ function runtime.trioHasPetClass()
     return false
 end
 
+-- ----------------------------------------------------------------------------
+-- Class count. The character is not limited to a trio: servers that allow more
+-- classes per character can set ctrl.class_count (1..MAX_CLASSES) on the
+-- Settings tab. Every class slot loop and the class picker size themselves
+-- from these helpers instead of a hard-coded 3.
+-- ----------------------------------------------------------------------------
+runtime.MAX_CLASSES = 16
+runtime.DEFAULT_CLASS_COUNT = 3
+-- Upper bound of the Puller's Search Radius / Combat Radius sliders (world units).
+runtime.MAX_SEARCH_RADIUS = 10000
+
+-- ----------------------------------------------------------------------------
+-- Tunables (Settings -> General Settings -> Advanced Tuning). Distances and
+-- timers that used to be literals in the pet, pull, roam and rez code. One
+-- table holds each key's default / limits / label, so the code reads them with
+-- runtime.tune(key) (clamped, falls back to the default for a missing or
+-- corrupt value) and the Settings UI is generated from the same list. Values
+-- are stored in ctrl under the same key, only once the player changes them.
+-- ----------------------------------------------------------------------------
+function runtime.tuningDefs()
+    if runtime.tuningCache then return runtime.tuningCache end
+    local list = {
+        { key = 'pet_scan_radius', group = 'Pet detection & summoning', label = 'Pet Search Radius',
+          default = 150, min = 25, max = 2000, fmt = '%d units',
+          tip = 'How far around you the script looks for your pets (pet tracking, the Pets tab, pet HUDs).' },
+        { key = 'pet_snapshot_radius', group = 'Pet detection & summoning', label = 'Summon Snapshot Radius',
+          default = 100, min = 25, max = 2000, fmt = '%d units',
+          tip = 'Pets inside this radius when a summon starts are remembered, so the pet that appears afterwards is recognised as the new one.' },
+        { key = 'pet_summon_grace_sec', group = 'Pet detection & summoning', label = 'Summon Grace',
+          default = 12, min = 3, max = 120, fmt = '%d s',
+          tip = 'After casting a pet summon, how long to wait for the pet to appear before the spell may be cast again.' },
+        { key = 'pet_summon_refused_backoff_sec', group = 'Pet detection & summoning', label = 'Refused-Summon Backoff',
+          default = 60, min = 5, max = 600, fmt = '%d s',
+          tip = 'When the server says a class already has a pet, summons for that class pause for this long.' },
+        { key = 'pet_buff_cache_sec', group = 'Pet detection & summoning', label = 'Pet Buff Memory',
+          default = 300, min = 30, max = 3600, fmt = '%d s',
+          tip = 'How long buffs cast on a pet are remembered when the game does not report them (pet buffs are not always readable).' },
+
+        { key = 'pull_direct_fight_dist', group = 'Pulling distances', label = 'Fight Nearby Target Directly',
+          default = 25, min = 5, max = 200, fmt = '%d units',
+          tip = 'Puller (Camp): a hostile target this close to you is fought where you stand instead of being pulled.' },
+        { key = 'pull_aggro_switch_dist', group = 'Pulling distances', label = 'Aggro Switch Distance',
+          default = 35, min = 5, max = 300, fmt = '%d units',
+          tip = 'Puller (Camp): while heading out to a mob, something else that attacks you replaces it as the pull when the original target is farther than this.' },
+        { key = 'pull_pet_tag_dist', group = 'Pulling distances', label = 'Pet Pull Tag Distance',
+          default = 35, min = 5, max = 300, fmt = '%d units',
+          tip = 'Pet pull: the mob counts as tagged (engaged) once it is within this distance of you.' },
+
+        { key = 'unreachable_forget_sec', group = 'Unreachable mobs', label = 'Unreachable Mob Blacklist',
+          default = 60, min = 10, max = 3600, fmt = '%d s',
+          tip = 'A mob the script gave up on (no path / cannot reach) is ignored for this long, then becomes eligible again.' },
+
+        { key = 'roam_pause_sec', group = 'Anchor roaming', label = 'Roam Pause',
+          default = 5, min = 1, max = 120, fmt = '%d s',
+          tip = 'Idle roaming inside the Combat Radius circle: how long to wait at each point before picking the next.' },
+        { key = 'roam_leg_max_sec', group = 'Anchor roaming', label = 'Roam Leg Time Limit',
+          default = 40, min = 10, max = 600, fmt = '%d s',
+          tip = 'A roam walk that has not arrived after this long is abandoned.' },
+        { key = 'roam_arrive_dist', group = 'Anchor roaming', label = 'Roam Arrival Distance',
+          default = 10, min = 3, max = 100, fmt = '%d units',
+          tip = 'A roam point counts as reached within this distance (2D).' },
+
+        { key = 'rez_max_attempts', group = 'Group resurrection', label = 'Rez Cast Attempts Per Corpse',
+          default = 3, min = 1, max = 10, fmt = '%d',
+          tip = 'How many resurrection casts are tried on one corpse (per session) before giving up on it.' },
+        { key = 'rez_nav_max_attempts', group = 'Group resurrection', label = 'Rez Approach Attempts',
+          default = 3, min = 1, max = 10, fmt = '%d',
+          tip = 'How many times the script tries to walk to a corpse before telling you to move closer.' },
+        { key = 'rez_search_range', group = 'Group resurrection', label = 'Corpse Search Range',
+          default = 2500, min = 100, max = 10000, fmt = '%d units',
+          tip = 'How far away a dead group member\'s corpse is looked for.' },
+    }
+    list.byKey = {}
+    for _, d in ipairs(list) do list.byKey[d.key] = d end
+    runtime.tuningCache = list
+    return list
+end
+
+-- The current value of a tunable: ctrl[key] clamped to its limits, or the
+-- default when unset / not a number. Unknown keys return nil.
+function runtime.tune(key)
+    local d = runtime.tuningDefs().byKey[key]
+    if not d then return nil end
+    local v = tonumber(ctrl and ctrl[key])
+    if v == nil then return d.default end
+    v = math.floor(v + 0.5)
+    if v < d.min then v = d.min end
+    if v > d.max then v = d.max end
+    return v
+end
+
+-- Clamps any value to a whole number in 1..MAX_CLASSES (non-numbers -> the default of 3).
+function runtime.clampClassCount(n)
+    n = math.floor(tonumber(n) or runtime.DEFAULT_CLASS_COUNT)
+    if n < 1 then n = 1 end
+    if n > runtime.MAX_CLASSES then n = runtime.MAX_CLASSES end
+    return n
+end
+
+-- The configured class count of the live character.
+function runtime.classLimit()
+    return runtime.clampClassCount(ctrl and ctrl.class_count)
+end
+
+-- The player changed the class count: store it and drop any classes beyond it.
+-- Returns the clamped count.
+function runtime.setClassCount(n)
+    n = runtime.clampClassCount(n)
+    ctrl.class_count = n
+    for j = #myClasses, n + 1, -1 do myClasses[j] = nil end
+    return n
+end
+
+-- Keeps the invariant "class_count >= #myClasses" after loading a save or a
+-- detection: a class list longer than the stored count (older save, hand edit)
+-- raises the count rather than silently dropping classes.
+function runtime.syncClassCount()
+    local n = runtime.clampClassCount(ctrl.class_count)
+    if #myClasses > n then n = runtime.clampClassCount(#myClasses) end
+    ctrl.class_count = n
+    for j = #myClasses, n + 1, -1 do myClasses[j] = nil end
+end
+
+-- Takes a freshly detected class list as the character's classes. Finding more
+-- classes than the configured count raises the count to fit (up to the max).
+function runtime.adoptClasses(list)
+    if type(list) ~= 'table' or #list == 0 then return false end
+    -- Update the list in place so every holder of a reference sees the change.
+    local fresh = {}
+    for _, c in ipairs(list) do
+        if #fresh >= runtime.MAX_CLASSES then break end
+        fresh[#fresh + 1] = c
+    end
+    for j = #myClasses, 1, -1 do myClasses[j] = nil end
+    for i, c in ipairs(fresh) do myClasses[i] = c end
+    runtime.syncClassCount()
+    return true
+end
+
 local COMBO_OPTIONS = {
     FRIENDLY = { 'Myself', 'Main Assist', 'Tank', 'Lowest-HP Ally', 'Me, then Group', 'Group, then Me', 'Whole Group', 'Pet' },
     ENEMY    = { 'Current Target', 'Assist Target', 'Nearest Add', 'Unmezzed Add', 'All Enemies' },
@@ -827,12 +969,29 @@ local function toCanonicalClassAbbr(str)
     return MQSHORT[up] or (ALL_ABBR and ALL_ABBR[idxOf(ALL_ABBR, s)] == s and s) or nil
 end
 
+-- One colour per class slot (runtime.MAX_CLASSES = 16). Slots 1-3 keep their
+-- original colours; 4-16 are spread around the hue wheel so neighbours differ.
+runtime.CLASS_PALETTE = {
+    { 0.30, 0.70, 1.00 }, -- slot 1: Arcane Blue
+    { 1.00, 0.55, 0.30 }, -- slot 2: Ember Gold
+    { 0.37, 0.88, 0.64 }, -- slot 3: Jade Green
+    { 0.90, 0.45, 0.85 }, -- slot 4: Orchid
+    { 0.95, 0.85, 0.35 }, -- slot 5: Sunflower
+    { 0.55, 0.55, 1.00 }, -- slot 6: Periwinkle
+    { 0.95, 0.40, 0.45 }, -- slot 7: Coral Red
+    { 0.45, 0.85, 0.90 }, -- slot 8: Aqua
+    { 0.70, 0.90, 0.35 }, -- slot 9: Lime
+    { 0.85, 0.65, 0.95 }, -- slot 10: Lavender
+    { 1.00, 0.70, 0.60 }, -- slot 11: Peach
+    { 0.40, 0.75, 0.55 }, -- slot 12: Sage
+    { 0.65, 0.80, 1.00 }, -- slot 13: Sky
+    { 0.80, 0.55, 0.40 }, -- slot 14: Copper
+    { 0.95, 0.60, 0.75 }, -- slot 15: Rose
+    { 0.75, 0.75, 0.45 }, -- slot 16: Olive
+}
+
 local function classColor(abbr)
-    local pal = {
-        { 0.30, 0.70, 1.00 }, -- slot 1: Arcane Blue
-        { 1.00, 0.55, 0.30 }, -- slot 2: Ember Gold
-        { 0.37, 0.88, 0.64 }, -- slot 3: Jade Green
-    }
+    local pal = runtime.CLASS_PALETTE
     for i, c in ipairs(myClasses) do
         if c == abbr then
             local col = pal[i] or { 0.49, 0.56, 0.65 }
@@ -1238,7 +1397,7 @@ do
                 if not invWin or not invWin() then return end
                 local listChild = invWin.Child('IW_ClassList')
                 if listChild and listChild() then
-                    for i = 1, 10 do
+                    for i = 1, runtime.MAX_CLASSES do
                         local ok, text = pcall(function() return listChild.List(i)() end)
                         if ok and text and text ~= '' and text ~= 'NULL' then
                             local norm = parseClassLine(text)
@@ -1336,8 +1495,8 @@ local function isSpawnAlive(id)
 end
 
 -- ============================================================================
--- Multi-pet tracking (this server lets each pet class of the trio keep its own
--- pet, so up to three at once). The single source of truth is
+-- Multi-pet tracking (this server lets each pet class of the character keep its
+-- own pet, so one per pet class at once). The single source of truth is
 -- petState.myPets[cls] = spawnId with two invariants that every writer below
 -- keeps: an ID is tracked under at most one class, and every tracked ID is a
 -- living spawn that belongs to us. Pet names are unique per player here, so a
@@ -1348,9 +1507,16 @@ end
 -- cls that learned this pet name from its own summon, or nil.
 local function petClsForName(name)
     if not name or name == '' then return nil end
+    local lower = string.lower(name)
+    -- Names the player typed in win over names learned from summons.
+    local manual = ctrl and ctrl.pet_names_manual
+    if type(manual) == 'table' then
+        for c, n in pairs(manual) do
+            if type(n) == 'string' and n ~= '' and string.lower(n) == lower then return c end
+        end
+    end
     local names = ctrl and ctrl.pet_names
     if type(names) ~= 'table' then return nil end
-    local lower = string.lower(name)
     for c, n in pairs(names) do
         if type(n) == 'string' and string.lower(n) == lower then return c end
     end
@@ -1427,6 +1593,62 @@ local function isSpawnMyPet(s_or_id)
     return isMine
 end
 
+-- ----------------------------------------------------------------------------
+-- Typed pet names. Pet names persist across resummons on multiclass servers, so
+-- a name the player types in (ctrl.pet_names_manual[cls]) identifies that
+-- class's pet far more reliably than a spawn ID (which changes on every
+-- resummon) or an archetype guess. A class with a typed name is tracked ONLY by
+-- that name: runtime.syncNamedPets re-pins its ID whenever the pet appears and
+-- clears it when no such pet of ours is alive, and the guessing paths below
+-- (archetype, "first class without a pet", summon-refused hand-over) never
+-- assign a pet to a class that has a typed name unless the names match.
+-- ----------------------------------------------------------------------------
+
+-- Trims a typed pet name and drops characters that cannot be in one.
+function runtime.cleanPetName(s)
+    if type(s) ~= 'string' then return '' end
+    s = s:gsub('[^%w%s%-\'`_]', '')
+    s = s:gsub('^%s+', ''):gsub('%s+$', '')
+    return (s:sub(1, 40))
+end
+
+-- The typed pet name of a class, or nil.
+function runtime.manualPetName(cls)
+    local m = ctrl and ctrl.pet_names_manual
+    local n = type(m) == 'table' and cls and m[cls] or nil
+    if type(n) == 'string' and n ~= '' then return n end
+    return nil
+end
+
+-- Spawn id of a living pet of OURS whose clean name equals `name` (any case),
+-- searched zone-wide; nil when there is none. The search term is only a
+-- pre-filter (a substring of the spawn name); the exact comparison and the
+-- ownership check decide.
+function runtime.findPetByName(name)
+    name = runtime.cleanPetName(name)
+    if name == '' then return nil end
+    local lname = string.lower(name)
+    local token = name:match('%S+') or name
+    local found = nil
+    pcall(function()
+        local filter = 'pet name "' .. token .. '"'
+        local count = mq.TLO.SpawnCount(filter)() or 0
+        if count > 12 then count = 12 end
+        for i = 1, count do
+            local s = mq.TLO.NearestSpawn(i, filter)
+            if s and s() then
+                local sid = s.ID() or 0
+                if sid > 0 and string.lower(s.CleanName() or '') == lname
+                    and isSpawnAlive(sid) and isSpawnMyPet(s) then
+                    found = sid
+                    return
+                end
+            end
+        end
+    end)
+    return found
+end
+
 -- Which class currently tracks this spawn ID (nil when untracked).
 local function petTrackedCls(id)
     if not id or id <= 0 then return nil end
@@ -1447,6 +1669,9 @@ local function prunePetTracking(throttled)
     local now = os.clock()
     if throttled and petState.lastPruneAt and (now - petState.lastPruneAt) < 0.25 then return end
     petState.lastPruneAt = now
+    -- Classes with a typed pet name are re-pinned / cleared by name first
+    -- (self-throttled; defined below trackPet).
+    if runtime.syncNamedPets then runtime.syncNamedPets() end
     local changed = false
     local seen = {}
     for _, c in ipairs(myClasses) do
@@ -1479,7 +1704,8 @@ local function trackPet(cls, id, learnName)
     petState.myPets[cls] = id
     petState.lastObservedId = id
     petState.petsCache = nil
-    if learnName then
+    -- A typed name is authoritative: a summon never overwrites it with a learned one.
+    if learnName and not (runtime.manualPetName and runtime.manualPetName(cls)) then
         local nm = spawnCleanName(id)
         if nm ~= '' then
             ctrl.pet_names = (type(ctrl.pet_names) == 'table') and ctrl.pet_names or {}
@@ -1492,6 +1718,64 @@ local function trackPet(cls, id, learnName)
             end
         end
     end
+end
+
+-- Stores (or, with an empty name, clears) the typed pet name of a class. A name
+-- belongs to one class, so it is removed from any other class that had it.
+function runtime.setManualPetName(cls, name)
+    if not cls or not ctrl then return false end
+    name = runtime.cleanPetName(name)
+    if type(ctrl.pet_names_manual) ~= 'table' then ctrl.pet_names_manual = {} end
+    if name == '' then
+        ctrl.pet_names_manual[cls] = nil
+    else
+        local lower = string.lower(name)
+        for c, n in pairs(ctrl.pet_names_manual) do
+            if c ~= cls and type(n) == 'string' and string.lower(n) == lower then ctrl.pet_names_manual[c] = nil end
+        end
+        if type(ctrl.pet_names) == 'table' then
+            for c, n in pairs(ctrl.pet_names) do
+                if c ~= cls and type(n) == 'string' and string.lower(n) == lower then ctrl.pet_names[c] = nil end
+            end
+        end
+        ctrl.pet_names_manual[cls] = name
+    end
+    petState.namedStatus = petState.namedStatus or {}
+    petState.namedStatus[cls] = nil
+    petState.lastNamedSyncAt = 0
+    petState.petsCache = nil
+    runtime.autoDirty = true
+    return true
+end
+
+-- Re-pins the pet of every class that has a typed name: the pet is found by
+-- name (so a resummon, which changes the spawn id, is picked up on the next
+-- pass) and the class's slot is cleared when no such pet of ours is alive.
+-- Result per class lands in petState.namedStatus[cls]: the spawn id, or false.
+-- Self-throttled to twice a second.
+function runtime.syncNamedPets(force)
+    local now = os.clock()
+    if not force and petState.lastNamedSyncAt and (now - petState.lastNamedSyncAt) < 0.5 then return end
+    petState.lastNamedSyncAt = now
+    petState.namedStatus = petState.namedStatus or {}
+    local changed = false
+    for _, cls in ipairs(myClasses) do
+        local nm = runtime.manualPetName(cls)
+        if nm then
+            local id = runtime.findPetByName(nm)
+            local cur = petState.myPets[cls]
+            if id then
+                if cur ~= id then trackPet(cls, id, false); changed = true end
+                petState.namedStatus[cls] = id
+            else
+                if cur then petState.myPets[cls] = nil; changed = true end
+                petState.namedStatus[cls] = false
+            end
+        else
+            petState.namedStatus[cls] = nil
+        end
+    end
+    if changed then petState.petsCache = nil end
 end
 
 -- Collects and returns all living spawn IDs belonging to the player (multi-pet support for trio classes).
@@ -1534,9 +1818,10 @@ local function getAllMyPets()
     local myId = 0
     pcall(function() myId = mq.TLO.Me.ID() or 0 end)
     pcall(function()
-        local count = mq.TLO.SpawnCount('pet radius 150')() or 0
+        local petFilter = string.format('pet radius %d', runtime.tune('pet_scan_radius'))
+        local count = mq.TLO.SpawnCount(petFilter)() or 0
         for i = 1, count do
-            local s = mq.TLO.NearestSpawn(i, 'pet radius 150')
+            local s = mq.TLO.NearestSpawn(i, petFilter)
             if s and s() then
                 local sid = s.ID() or 0
                 -- Cheap master check first: in a group/raid most nearby pets
@@ -1602,11 +1887,17 @@ function runtime.detectPetClassFromSpawn(s)
     end)
     local learned = petClsForName(cname)
     if learned then return learned end
-    if cname:find('warder', 1, true) then return 'Bst' end
-    if race:find('animation', 1, true) or cname:find('animation', 1, true) then return 'Enc' end
-    if race:find('elemental', 1, true) then return 'Mag' end
-    if race:find('skeleton', 1, true) or race:find('spectre', 1, true) or race:find('zombie', 1, true) then return 'Nec' end
-    if cname:find('spirit wolf', 1, true) then return 'Shm' end
+    -- Archetype guesses never claim a pet for a class whose pet has a typed
+    -- name: that class is matched by name only.
+    local function guess(c)
+        if runtime.manualPetName and runtime.manualPetName(c) then return nil end
+        return c
+    end
+    if cname:find('warder', 1, true) then return guess('Bst') end
+    if race:find('animation', 1, true) or cname:find('animation', 1, true) then return guess('Enc') end
+    if race:find('elemental', 1, true) then return guess('Mag') end
+    if race:find('skeleton', 1, true) or race:find('spectre', 1, true) or race:find('zombie', 1, true) then return guess('Nec') end
+    if cname:find('spirit wolf', 1, true) then return guess('Shm') end
     return nil
 end
 
@@ -1617,6 +1908,13 @@ end
 -- being pinned to whichever class happens to have no pet.
 function runtime.petEligibleForCls(pid, cls, mePetId)
     if not pid or pid <= 0 or not cls then return false end
+    -- A class with a typed pet name only ever gets the pet that carries it.
+    local typed = runtime.manualPetName and runtime.manualPetName(cls)
+    if typed then
+        local nm = ''
+        pcall(function() nm = mq.TLO.Spawn(pid).CleanName() or '' end)
+        return string.lower(nm) == string.lower(typed)
+    end
     if mePetId and mePetId > 0 and pid == mePetId then return true end
     local det = nil
     pcall(function()
@@ -1706,7 +2004,7 @@ local function getMultiPetList()
     local mePetId = 0
     pcall(function() mePetId = mq.TLO.Me.Pet.ID() or 0 end)
 
-    for i = 1, 3 do
+    for i = 1, #myClasses do
         local cls = myClasses[i]
         if cls then
             local isPetCls = petState.PET_CLASSES[cls] == true
@@ -1771,13 +2069,12 @@ end
 -- when Me.Pet does not change (it usually stays on the first pet here), and
 -- the gem stays quiet while the summon is in flight instead of re-casting.
 -- ---------------------------------------------------------------------------
-local PET_SUMMON_GRACE_SEC = 12
 local PET_SUMMON_NEAR_DIST = 40
 
 local function snapshotNearbySpawnIds()
     local set = {}
     pcall(function()
-        local filter = 'pet radius 100'
+        local filter = string.format('pet radius %d', runtime.tune('pet_snapshot_radius'))
         local count = mq.TLO.SpawnCount(filter)() or 0
         for i = 1, count do
             local s = mq.TLO.NearestSpawn(i, filter)
@@ -1796,7 +2093,7 @@ local function beginPetSummon(cls, spellName)
         cls = cls,
         spell = spellName,
         at = now,
-        untilAt = now + PET_SUMMON_GRACE_SEC,
+        untilAt = now + runtime.tune('pet_summon_grace_sec'),
         snapshot = snapshotNearbySpawnIds(),
     }
 end
@@ -1807,6 +2104,16 @@ local function updatePetTracking()
     local now = os.clock()
     prunePetTracking()
     local sp = petState.summonPending
+    if sp and runtime.manualPetName(sp.cls) then
+        -- Typed pet name: the name sync (prunePetTracking above) pins the summoned
+        -- pet. The summon is done once that pet is tracked and alive; otherwise
+        -- wait out the grace period. No "nearest new pet" guessing for this class.
+        local pid = petState.myPets[sp.cls]
+        if (pid and pid > 0 and isSpawnAlive(pid)) or now >= sp.untilAt then
+            petState.summonPending = nil
+        end
+        sp = nil
+    end
     if sp then
         local found = nil
         -- 1. a living pet of ours that nobody tracks yet
@@ -1845,7 +2152,7 @@ local function updatePetTracking()
         elseif now >= sp.untilAt then
             petState.summonPending = nil
             if ctrl.debug_mode then
-                print(string.format('\ao[DEBUG pet]\ax %s summon "%s" produced no pet within %ds', tostring(sp.cls), tostring(sp.spell), PET_SUMMON_GRACE_SEC))
+                print(string.format('\ao[DEBUG pet]\ax %s summon "%s" produced no pet within %ds', tostring(sp.cls), tostring(sp.spell), runtime.tune('pet_summon_grace_sec')))
             end
         end
     end
@@ -1857,7 +2164,8 @@ local function updatePetTracking()
             local cls = sp and sp.cls or nil
             if not cls then
                 for _, c in ipairs(myClasses) do
-                    if petState.PET_CLASSES[c] and (not petState.myPets[c] or not isSpawnAlive(petState.myPets[c])) then
+                    if petState.PET_CLASSES[c] and not runtime.manualPetName(c)
+                        and (not petState.myPets[c] or not isSpawnAlive(petState.myPets[c])) then
                         cls = c
                         break
                     end
@@ -1878,12 +2186,20 @@ local function onPetSummonRefused()
     local sp = petState.summonPending
     petState.summonPending = nil
     if not sp or not sp.cls then return end
-    petState.summonBlockedUntil[sp.cls] = os.clock() + 60
+    local backoffSec = runtime.tune('pet_summon_refused_backoff_sec')
+    petState.summonBlockedUntil[sp.cls] = os.clock() + backoffSec
     if petState.myPets[sp.cls] and isSpawnAlive(petState.myPets[sp.cls]) then return end
+    if runtime.manualPetName(sp.cls) then
+        -- Typed name: this class's pet is found by that name, never handed over.
+        print(string.format('\ay[Triune]\ax server says %s already has a pet, but no pet named "%s" of yours was found -- check the name under Settings -> Pet Names. Pausing %s pet summons for %ds.',
+            sp.cls, runtime.manualPetName(sp.cls), sp.cls, backoffSec))
+        return
+    end
     local names = (type(ctrl.pet_names) == 'table') and ctrl.pet_names or {}
     for _, c in ipairs(myClasses) do
         local pid = petState.myPets[c]
-        if c ~= sp.cls and pid and isSpawnAlive(pid) then
+        -- never take the pet of a class whose pet name was typed in
+        if c ~= sp.cls and pid and isSpawnAlive(pid) and not runtime.manualPetName(c) then
             local nm = spawnCleanName(pid)
             if not names[c] or string.lower(names[c]) ~= string.lower(nm) then
                 trackPet(sp.cls, pid, true)
@@ -1892,7 +2208,7 @@ local function onPetSummonRefused()
             end
         end
     end
-    print(string.format('\ay[Triune]\ax server says %s already has a pet but none was detected -- pausing %s pet summons for 60s.', sp.cls, sp.cls))
+    print(string.format('\ay[Triune]\ax server says %s already has a pet but none was detected -- pausing %s pet summons for %ds.', sp.cls, sp.cls, backoffSec))
 end
 
 -- 'missing pet' gem condition: does this gem's class need to summon?
@@ -2161,7 +2477,7 @@ local function getPetSpawnInfo(petId)
                     buffs = info.buffs,
                     buffDetails = info.buffDetails
                 }
-            elseif petState.cachedPetBuffs[petId] and (os.clock() - (petState.cachedPetBuffs[petId].time or 0)) < 300 then
+            elseif petState.cachedPetBuffs[petId] and (os.clock() - (petState.cachedPetBuffs[petId].time or 0)) < runtime.tune('pet_buff_cache_sec') then
                 info.buffs = petState.cachedPetBuffs[petId].buffs or {}
                 info.buffDetails = petState.cachedPetBuffs[petId].buffDetails or {}
             end
@@ -2494,7 +2810,8 @@ function runtime.stopMovementForCast(cls, spell)
 end
 
 
--- Spawn ids MQ2Nav has told us have no path to. Cleared after 60s in case terrain
+-- Spawn ids MQ2Nav has told us have no path to. Cleared after 60s (default; the
+-- "Unreachable Mob Blacklist" setting) in case terrain
 -- state changes (a door opens, etc). findRoamTarget skips these when picking a
 -- fresh target; Hunter/Puller drop their current target the moment it lands here
 -- rather than continuing to sit on something they can never reach.
@@ -2511,7 +2828,7 @@ end
 local function isUnreachable(id)
     local t = pursuit.unreachableIds[id]
     if not t then return false end
-    if (os.clock() - t) > 60 then
+    if (os.clock() - t) > runtime.tune('unreachable_forget_sec') then
         pursuit.unreachableIds[id] = nil; return false
     end
     return true
@@ -5413,6 +5730,9 @@ function runtime.applyEntry(e)
         runtime.loadZoneAnchor()
         for _, wp in ipairs(ctrl.waypoints or {}) do runtime.wpNormalize(wp) end
     end
+    -- Saves from before the class-count setting have no class_count (the default
+    -- of 3 stays); a class list longer than the stored count raises it.
+    runtime.syncClassCount()
 end
 
 function runtime.deepCopyTable(orig)
@@ -6605,13 +6925,11 @@ function runtime.onCharacterChanged()
         runtime.applyEntry(ALLDATA[myName])
         scanKnownDiscs()
     else
-        local detected = detectClasses(true)
-        if detected then myClasses = detected end
+        runtime.adoptClasses(detectClasses(true))
         runtime.importCurrentGems() -- new character: seed the loadout from the current bar
     end
     if not myClasses or #myClasses == 0 then
-        local liveClasses = detectClasses(false)
-        if liveClasses then myClasses = liveClasses end
+        runtime.adoptClasses(detectClasses(false))
     end
     runtime.wpReset(false)
     ctrl.running = false -- never auto-start on load
@@ -7004,6 +7322,7 @@ function runtime.initPluginManager()
         if scriptDir then
             local s = tostring(scriptDir):gsub('[/\\]+$', '')
             table.insert(rawCandidates, s .. '/tac')
+            table.insert(rawCandidates, s .. '/../tac')
             table.insert(rawCandidates, s .. '/TAC')
             table.insert(rawCandidates, s .. '/../lua/tac')
             table.insert(rawCandidates, s .. '/../TAC/lua/tac')
@@ -7051,7 +7370,7 @@ function runtime.initPluginManager()
             end
         end
 
-        pm.dirPath = (scriptDir and (scriptDir .. 'tac')) or 'lua/tac'
+        pm.dirPath = (scriptDir and (scriptDir .. '../tac')) or 'lua/tac'
         return pm.dirPath
     end
 
@@ -8889,7 +9208,20 @@ function UI.drawClassPicker()
         'Wiz', 'Mag', 'Enc', 'Bst', 'Ber' }
     if ImGui.CollapsingHeader('Character Classes & Loadout', ImGuiTreeNodeFlags.DefaultOpen) then
         ImGui.TextDisabled('Auto-detected from Inventory Window on login; adjust manually if needed:')
-        for i = 1, 3 do
+        -- Class count: how many classes this character has (1-16). The slots
+        -- below, the status badges and every per-class list follow it.
+        local limit = runtime.classLimit()
+        ImGui.SetNextItemWidth(UI.px(160))
+        local newLimit = ImGui.SliderInt('Number of classes##clsCount', limit, 1, runtime.MAX_CLASSES)
+        if newLimit and newLimit ~= limit then
+            limit = runtime.setClassCount(newLimit)
+            runtime.saveLoadout(true)
+        end
+        if ImGui.IsItemHovered() then
+            UI.setTooltip('How many classes your character has on this server (1-16). Lowering it removes the extra class slots from the end of the list.')
+        end
+        for i = 1, limit do
+            if i > 1 and (i - 1) % 4 ~= 0 then ImGui.SameLine() end
             ImGui.SetNextItemWidth(UI.px(95))
             local currentVal = myClasses[i]
             local currentIdx = 1
@@ -8906,19 +9238,129 @@ function UI.drawClassPicker()
                 -- Rebuild without holes: every consumer walks myClasses with
                 -- ipairs, so a nil in slot 1 or 2 silently hid the later classes.
                 local picked = {}
-                for j = 1, 3 do
+                for j = 1, runtime.MAX_CLASSES do
                     local v = (j == i) and (newIdx ~= 1 and CLASS_PICKER_OPTIONS[newIdx] or nil) or myClasses[j]
                     if v then picked[#picked + 1] = v end
                 end
-                for j = 1, 3 do myClasses[j] = picked[j] end
+                for j = 1, runtime.MAX_CLASSES do myClasses[j] = picked[j] end
                 runtime.saveLoadout()
             end
-            ImGui.SameLine()
         end
+        if limit % 4 ~= 0 then ImGui.SameLine() end
         if ImGui.Button('Re-detect') then reDetectRequested = true end
         if ImGui.Button('Save Loadout', UI.px(140), UI.px(24)) then runtime.saveLoadout() end
         ImGui.SameLine(); ImGui.TextDisabled('-> triune_loadout.lua (auto-saves on changes)')
         accent(MUTED, 'Detected from your in-game Inventory Window.')
+    end
+end
+
+-- Settings -> General Settings -> Advanced Tuning: one slider per entry of
+-- runtime.tuningDefs() (distances and timers that used to be literals). A value
+-- is only written to ctrl once changed; Reset puts every one back to its default.
+function UI.drawAdvancedTuning()
+    if not ImGui.CollapsingHeader('Advanced Tuning (distances & timers)', ImGuiTreeNodeFlags.None) then return end
+    ImGui.TextDisabled('Fine-tuning values for pets, pulling, roaming and resurrection. The defaults suit most setups;')
+    ImGui.TextDisabled('hover a slider for what it does, Ctrl+click to type an exact value.')
+    local lastGroup = nil
+    for _, d in ipairs(runtime.tuningDefs()) do
+        if d.group ~= lastGroup then
+            lastGroup = d.group
+            ImGui.Spacing()
+            accent(GOLD, d.group .. ':')
+        end
+        local cur = runtime.tune(d.key)
+        ImGui.SetNextItemWidth(UI.px(200))
+        local newVal = ImGui.SliderInt(d.label .. '##tune_' .. d.key, cur, d.min, d.max, d.fmt)
+        if newVal and newVal ~= cur then
+            ctrl[d.key] = newVal
+            runtime.saveLoadout(true)
+        end
+        if ImGui.IsItemHovered() then
+            UI.setTooltip('%s', string.format('%s\nDefault: %d', d.tip, d.default))
+        end
+    end
+    ImGui.Spacing()
+    if ImGui.Button('Reset Advanced Tuning To Defaults##tuneReset') then
+        for _, d in ipairs(runtime.tuningDefs()) do ctrl[d.key] = nil end
+        runtime.saveLoadout(true)
+    end
+end
+
+-- Typed pet names, one row per pet class (Settings -> Pet Management). The name
+-- is applied when the field loses focus or Set is pressed, not per keystroke: a
+-- half-typed name would look like "pet gone" and trigger a re-summon.
+function UI.drawPetNames()
+    local hasPetCls = false
+    for _, cls in ipairs(myClasses) do
+        if petState.PET_CLASSES[cls] then hasPetCls = true; break end
+    end
+    if not hasPetCls then return end
+    ImGui.Separator()
+    accent(GOLD, 'Pet Names:')
+    ImGui.TextDisabled('Type each pet class\'s pet name (names persist across resummons). The pet is then found by name,')
+    ImGui.TextDisabled('so it stays on the right class through resummons, zoning and restarts. Leave blank to auto-detect.')
+    runtime.petNameEdit = runtime.petNameEdit or {}
+    for _, cls in ipairs(myClasses) do
+        if petState.PET_CLASSES[cls] then
+            local saved = runtime.manualPetName(cls) or ''
+            local buf = runtime.petNameEdit[cls]
+            if buf == nil then buf = saved end
+            local cr, cg, cb = classColor(cls)
+            accent({ cr, cg, cb, 1.0 }, string.format('%-4s', cls))
+            ImGui.SameLine()
+            ImGui.SetNextItemWidth(UI.px(160))
+            local newBuf = ImGui.InputText('##petName_' .. cls, buf, 40)
+            if type(newBuf) == 'string' and newBuf ~= buf then
+                buf = newBuf
+                runtime.petNameEdit[cls] = newBuf
+            end
+            local okDone, done = pcall(ImGui.IsItemDeactivatedAfterEdit)
+            local apply = okDone and done and true or false
+            if ImGui.IsItemHovered() then
+                UI.setTooltip('The exact name of this class\'s pet. Applied when you click away or press Set.')
+            end
+            ImGui.SameLine()
+            if ImGui.SmallButton('Set##petSet_' .. cls) then apply = true end
+            ImGui.SameLine()
+            if ImGui.SmallButton('Use target##petUse_' .. cls) then
+                local tid, tname = 0, ''
+                pcall(function() tid = mq.TLO.Target.ID() or 0; tname = mq.TLO.Target.CleanName() or '' end)
+                if tid > 0 and tname ~= '' and isSpawnMyPet(tid) then
+                    buf = tname
+                    apply = true
+                else
+                    print('\ay[Triune]\ax Target one of your own pets first, then press Use target.')
+                end
+            end
+            if ImGui.IsItemHovered() then
+                UI.setTooltip('Fills in the name of your currently targeted pet.')
+            end
+            ImGui.SameLine()
+            if ImGui.SmallButton('Clear##petClr_' .. cls) then buf = ''; apply = true end
+            if apply then
+                runtime.setManualPetName(cls, buf)
+                runtime.petNameEdit[cls] = nil
+                runtime.syncNamedPets(true)
+                runtime.saveLoadout(true)
+            end
+
+            -- Live status: is a pet with that name alive right now?
+            local nm = runtime.manualPetName(cls)
+            ImGui.SameLine()
+            if not nm then
+                local learned = type(ctrl.pet_names) == 'table' and ctrl.pet_names[cls] or nil
+                accent(MUTED, learned and string.format('auto-detect (last seen: %s)', learned) or 'auto-detect')
+            else
+                local st = petState.namedStatus and petState.namedStatus[cls]
+                if st then
+                    accent(GOOD, string.format('alive (#%d)', st))
+                elseif st == false then
+                    accent(WARN, 'no pet of yours with that name')
+                else
+                    accent(MUTED, 'checking...')
+                end
+            end
+        end
     end
 end
 
@@ -11332,11 +11774,15 @@ function UI.drawStatusTab()
         end
 
         -- Status flags & Trio class badges
-        accent(GOLD, 'Gestalt Trio:')
-        for i = 1, 3 do
+        local clsLimit = runtime.classLimit()
+        accent(GOLD, clsLimit == 3 and 'Gestalt Trio:' or string.format('Classes (%d):', clsLimit))
+        local badgeN = 0
+        for i = 1, runtime.MAX_CLASSES do
             local cls = myClasses[i]
             if cls and cls ~= '' and cls ~= '-- None --' then
-                ImGui.SameLine()
+                -- Wrap after every 4 badges so 16 classes don't run off the card.
+                if badgeN % 4 ~= 0 or badgeN == 0 then ImGui.SameLine() end
+                badgeN = badgeN + 1
                 local cr, cg, cb = classColor(cls)
                 accent({ cr, cg, cb, 1.0 }, string.format('[Slot %d: %s]', i, cls))
             end
@@ -12110,7 +12556,7 @@ function UI.drawControlTab()
 
         if ctrl.camp_loc then
             ImGui.SetNextItemWidth(UI.px(180))
-            local manualCampR, manualCampRChanged = ImGui.SliderInt('Camp Radius##manualRadius', ctrl.camp_radius or 100, 10, 500)
+            local manualCampR, manualCampRChanged = ImGui.SliderInt('Camp Radius##manualRadius', ctrl.camp_radius or 100, 10, runtime.MAX_SEARCH_RADIUS)
             if manualCampRChanged then
                 ctrl.camp_radius = manualCampR
                 runtime.saveLoadout(true)
@@ -12133,7 +12579,7 @@ function UI.drawControlTab()
         if ctrl.manual_auto_xtarget ~= false then
             ImGui.SetNextItemWidth(UI.px(180))
             ctrl.xtar_nav_dist = ImGui.SliderInt('Max XTarget Chase Range##manualXtarDist', ctrl.xtar_nav_dist or 150, 25,
-                300)
+                runtime.MAX_SEARCH_RADIUS)
             if ImGui.IsItemHovered() then
                 ImGui.SetTooltip(
                     'Maximum distance (units) to navigate toward an active NPC on Extended Target (XTarget).')
@@ -12282,10 +12728,15 @@ function UI.drawControlTab()
         if ctrl.submode == 'Hunt' then
             accent(ARC, 'Puller (Hunt)')
             ImGui.SetNextItemWidth(UI.px(180))
-            local huntR, huntRChanged = ImGui.SliderInt('Search Radius', ctrl.hunter_radius or 1500, 50, 2000)
+            local huntR, huntRChanged = ImGui.SliderInt('Search Radius', ctrl.hunter_radius or 1500, 50, runtime.MAX_SEARCH_RADIUS)
             if huntRChanged then
                 ctrl.hunter_radius = huntR
                 runtime.saveLoadout(true)
+            end
+            if ImGui.IsItemHovered() then
+                ImGui.SetTooltip('%s',
+                    'How far from you the Puller looks for mobs (up to ' .. runtime.MAX_SEARCH_RADIUS .. ').\n'
+                    .. 'Ctrl+click the slider to type an exact value.')
             end
             ImGui.SetNextItemWidth(UI.px(180))
             ctrl.hunter_z_plane = ImGui.SliderInt('Floor Height (Z Plane)', ctrl.hunter_z_plane or 15, 5, 50)
@@ -12308,7 +12759,7 @@ function UI.drawControlTab()
 
             ImGui.SetNextItemWidth(UI.px(180))
             ctrl.xtar_nav_dist = ImGui.SliderInt('Max XTarget Chase Range##pullerHuntXtar', ctrl.xtar_nav_dist or 150, 25,
-                300)
+                runtime.MAX_SEARCH_RADIUS)
             if ImGui.IsItemHovered() then
                 ImGui.SetTooltip(
                     'Maximum distance (units) to navigate toward an active NPC on Extended Target (XTarget).')
@@ -12372,15 +12823,16 @@ function UI.drawControlTab()
             ImGui.SetNextItemWidth(UI.px(220))
             local curRadius = (ctrl.hunter_combat_radius and ctrl.hunter_combat_radius > 0) and ctrl
                 .hunter_combat_radius or 250
-            local newRadius, changed = ImGui.SliderInt('Combat Radius##pullerAnchorRadius', curRadius, 1, 2000)
+            local newRadius, changed = ImGui.SliderInt('Combat Radius##pullerAnchorRadius', curRadius, 1, runtime.MAX_SEARCH_RADIUS)
             if changed then
                 ctrl.hunter_combat_radius = newRadius
                 if ctrl.hunter_combat_loc then runtime.saveZoneAnchor() else runtime.saveLoadout(true) end
             end
             if ImGui.IsItemHovered() then
                 ImGui.SetTooltip(
-                    'How far from the anchor the Puller may go. This caps Search Radius: a 2000 search with a 500 anchor\n'
-                    .. 'still only takes mobs within 500 of the anchor and never walks past that line.')
+                    'How far from the anchor the Puller may go. This caps Search Radius: a 5000 search with a 500 anchor\n'
+                    .. 'still only takes mobs within 500 of the anchor and never walks past that line.\n'
+                    .. 'Ctrl+click the slider to type an exact value.')
             end
 
             local roamOn, roamChanged = ImGui.Checkbox('Roam Inside the Circle While Idle##pullerAnchorRoam',
@@ -12421,7 +12873,7 @@ function UI.drawControlTab()
             end
 
             ImGui.SetNextItemWidth(UI.px(180))
-            local pullRad, pullRadChanged = ImGui.SliderInt('Pull Radius', ctrl.camp_radius or 100, 10, 500)
+            local pullRad, pullRadChanged = ImGui.SliderInt('Pull Radius', ctrl.camp_radius or 100, 10, runtime.MAX_SEARCH_RADIUS)
             if pullRadChanged then
                 ctrl.camp_radius = pullRad
                 runtime.saveLoadout(true)
@@ -12450,7 +12902,7 @@ function UI.drawControlTab()
 
             ImGui.SetNextItemWidth(UI.px(180))
             ctrl.xtar_nav_dist = ImGui.SliderInt('Max XTarget Chase Range##pullerCampXtar', ctrl.xtar_nav_dist or 150, 25,
-                300)
+                runtime.MAX_SEARCH_RADIUS)
             if ImGui.IsItemHovered() then
                 ImGui.SetTooltip(
                     'Maximum distance (units) to navigate toward an active NPC on Extended Target (XTarget).')
@@ -13098,7 +13550,7 @@ function UI.drawControlTab()
         end
 
         ImGui.SetNextItemWidth(UI.px(180))
-        ctrl.xtar_nav_dist = ImGui.SliderInt('Max XTarget Chase Range##assistXtarDist', ctrl.xtar_nav_dist or 150, 25, 300)
+        ctrl.xtar_nav_dist = ImGui.SliderInt('Max XTarget Chase Range##assistXtarDist', ctrl.xtar_nav_dist or 150, 25, runtime.MAX_SEARCH_RADIUS)
         if ImGui.IsItemHovered() then
             ImGui.SetTooltip('Maximum distance (units) to navigate toward an active NPC on Extended Target (XTarget) or Main Assist target.')
         end
@@ -14620,10 +15072,11 @@ function UI.drawSettingsTab()
             runtime.saveLoadout(true)
         end
         if ImGui.IsItemHovered() then
-            ImGui.SetTooltip(
+            ImGui.SetTooltip('%s',
                 'When enabled, Triune approaches dead group members and casts a configured resurrection spell.\n'
                 .. 'Requires MQ2Rez and a memorized resurrection spell gem configured with condition "ally is Dead".\n'
-                .. 'Triune makes up to three cast attempts per corpse per session. MQ2Rez is for accepting incoming rez offers; it does not cast the spell.')
+                .. string.format('Triune makes up to %d cast attempts per corpse per session (Advanced Tuning). ', runtime.tune('rez_max_attempts'))
+                .. 'MQ2Rez is for accepting incoming rez offers; it does not cast the spell.')
         end
         accent(MUTED, 'Optional dependency: MQ2Rez. Add a resurrection spell under Spell Gems and set its condition to "ally is Dead".')
     end
@@ -14976,9 +15429,13 @@ function UI.drawSettingsTab()
                     .. 'or prior to reaching the Pet Assist At HP threshold,\n'
                     .. 'releasing them to attack once threshold is met.')
             end
+            UI.drawPetNames()
         end
     end
 
+
+    -- 6b. Advanced Tuning (distances & timers)
+    UI.drawAdvancedTuning()
 
     -- 7. Interface, Overlays & Diagnostics
     if ImGui.CollapsingHeader('Interface, Overlays & Diagnostics', ImGuiTreeNodeFlags.DefaultOpen) then
@@ -15716,13 +16173,18 @@ function UI.drawFullGui()
     local winFlags = ImGuiWindowFlags and ImGuiWindowFlags.HorizontalScrollbar or 0
     local show
     local clsList = {}
-    for i = 1, 3 do
+    for i = 1, runtime.MAX_CLASSES do
         local c = myClasses and myClasses[i]
         if c and c ~= '' and c ~= '-- None --' then
             table.insert(clsList, c)
         end
     end
-    local clsText = #clsList > 0 and table.concat(clsList, ' / ') or '?'
+    -- Keep the title bar readable: the first 4 classes, then "+N" for the rest.
+    local clsText = '?'
+    if #clsList > 0 then
+        clsText = table.concat(clsList, ' / ', 1, math.min(#clsList, 4))
+        if #clsList > 4 then clsText = clsText .. string.format(' +%d', #clsList - 4) end
+    end
     local charName = myName or (mq.TLO.Me.CleanName and mq.TLO.Me.CleanName()) or '(no character)'
     local winTitle = string.format('TAC v%s - %s (%s)###triune', VERSION, charName, clsText)
     UI.preBeginWindow('main')
@@ -18014,19 +18476,21 @@ function runtime.recordGroupRezAttempt(corpseId, spellName)
     attempts.lastAt = os.clock()
     attempts.spell = spellName
     runtime.groupRezAttempts[corpseId] = attempts
+    local maxAttempts = runtime.tune('rez_max_attempts')
     print(string.format(
-        '\ay[Triune]\ax Resurrection attempt %d/3 on group corpse #%d using "%s".',
-        attempts.count, corpseId, spellName))
-    if attempts.count >= 3 then
+        '\ay[Triune]\ax Resurrection attempt %d/%d on group corpse #%d using "%s".',
+        attempts.count, maxAttempts, corpseId, spellName))
+    if attempts.count >= maxAttempts then
         attempts.gaveUp = true
         print(string.format(
-            '\ar[Triune]\ax Giving up on corpse #%d after three resurrection attempts.',
-            corpseId))
+            '\ar[Triune]\ax Giving up on corpse #%d after %d resurrection attempts.',
+            corpseId, maxAttempts))
     end
 end
 
 -- Resurrection support: the nearest corpse of a dead group member (or box
--- peer). Excludes corpses already attempted three times in this session.
+-- peer). Excludes corpses already attempted the maximum number of times
+-- (Settings -> Advanced Tuning, default 3) in this session.
 function runtime.isGroupRezCorpse(id)
     if not id or id <= 0 then return false end
     local ok, isCorpse = pcall(function()
@@ -18037,7 +18501,8 @@ function runtime.isGroupRezCorpse(id)
 end
 
 function runtime.deadAllyCorpseId(maxDist)
-    maxDist = maxDist or 2500
+    maxDist = maxDist or runtime.tune('rez_search_range')
+    local maxAttempts = runtime.tune('rez_max_attempts')
     local bestId, bestDist = nil, maxDist + 1
     local function consider(name)
         if not name or name == '' then return end
@@ -18047,11 +18512,11 @@ function runtime.deadAllyCorpseId(maxDist)
             return nil, nil
         end)
         local attempts = cid and runtime.groupRezAttempts[cid]
-        if ok and cid and dist and dist < bestDist and not (attempts and attempts.count >= 3) then
+        if ok and cid and dist and dist < bestDist and not (attempts and attempts.count >= maxAttempts) then
             bestId, bestDist = cid, dist
-        elseif attempts and attempts.count >= 3 and not attempts.gaveUp then
+        elseif attempts and attempts.count >= maxAttempts and not attempts.gaveUp then
             attempts.gaveUp = true
-            print(string.format('\ar[Triune]\ax Giving up on corpse #%d after three resurrection attempts.', cid))
+            print(string.format('\ar[Triune]\ax Giving up on corpse #%d after %d resurrection attempts.', cid, maxAttempts))
         end
     end
     if not ctrl or ctrl.auto_group_rez ~= true or not runtime.mq2RezLoaded() then return nil end
@@ -18091,7 +18556,7 @@ function runtime.prepareGroupRez()
     runtime.groupRezWarnings.missingPlugin = nil
     if isCombat() then return false end
 
-    local corpseId = runtime.deadAllyCorpseId(2500)
+    local corpseId = runtime.deadAllyCorpseId() -- searches out to the Corpse Search Range setting
     if not corpseId then
         runtime.groupRezMoveTargetId = 0
         return false
@@ -18139,12 +18604,13 @@ function runtime.prepareGroupRez()
     if isMoveActive() then return false end
 
     local navAttempts = runtime.groupRezNavAttempts[corpseId] or 0
-    if navAttempts >= 3 then
+    local maxNavAttempts = runtime.tune('rez_nav_max_attempts')
+    if navAttempts >= maxNavAttempts then
         if not runtime.groupRezWarnings[corpseId] then
             runtime.groupRezWarnings[corpseId] = true
             print(string.format(
-                '\ar[Triune]\ax Could not reach group corpse #%d after three navigation attempts; move closer manually.',
-                corpseId))
+                '\ar[Triune]\ax Could not reach group corpse #%d after %d navigation attempts; move closer manually.',
+                corpseId, maxNavAttempts))
         end
         return false
     end
@@ -18155,8 +18621,8 @@ function runtime.prepareGroupRez()
     runtime.groupRezMoveAt = now
     runtime.groupRezMoveTargetId = corpseId
     print(string.format(
-        '\ay[Triune]\ax Approaching group corpse #%d (%d/3 navigation attempts) to cast a configured resurrection spell.',
-        corpseId, navAttempts))
+        '\ay[Triune]\ax Approaching group corpse #%d (%d/%d navigation attempts) to cast a configured resurrection spell.',
+        corpseId, navAttempts, maxNavAttempts))
     mq.cmdf('/nav id %d distance=%d', corpseId, math.max(5, math.floor(rezRange - 5)))
     return true
 end
@@ -22239,10 +22705,9 @@ end
 -- the circle instead of camping one spot in it. pursuit.wanderLoc is the
 -- leg under way (the Status tab shows it); the target-acquire path clears it
 -- and stops the walk. Returns true while a leg is in progress.
+-- The dwell at each point, the leg time limit and the 2D arrival distance are
+-- settings (runtime.tune: roam_pause_sec, roam_leg_max_sec, roam_arrive_dist).
 runtime.ANCHOR_ROAM = {
-    PAUSE_SECS   = 5,    -- dwell at each point before the next pick
-    LEG_MAX_SECS = 40,   -- a leg that has not arrived by then is abandoned
-    ARRIVE_DIST  = 10,   -- 2D: the point's Z is a guess (the anchor's)
     MIN_FRAC     = 0.25, -- pick between these fractions of the radius...
     MAX_FRAC     = 0.90, -- ...from the anchor: neither on the anchor nor on the line
     TRIES        = 6,    -- candidate points per pick before giving up this round
@@ -22256,6 +22721,9 @@ function runtime.anchorRoamTick()
         return false
     end
     local C = runtime.ANCHOR_ROAM
+    local pauseSecs = runtime.tune('roam_pause_sec')
+    local legMaxSecs = runtime.tune('roam_leg_max_sec')
+    local arriveDist = runtime.tune('roam_arrive_dist') -- 2D: the point's Z is a guess (the anchor's)
     local now = os.clock()
     local me = mq.TLO.Me
     local mx, my = me.X() or 0, me.Y() or 0
@@ -22264,16 +22732,16 @@ function runtime.anchorRoamTick()
         local dx, dy = mx - wl.x, my - wl.y
         local navActive = false
         pcall(function() navActive = mq.TLO.Navigation.Active() or false end)
-        local arrived = (dx * dx + dy * dy) <= (C.ARRIVE_DIST * C.ARRIVE_DIST)
+        local arrived = (dx * dx + dy * dy) <= (arriveDist * arriveDist)
         -- nav finishing short of our 2D arrival (a Z guess, a mesh edge) still ends the leg
         local navDone = (now - (wl.at or now)) > 2.0 and not navActive
-        if arrived or navDone or (now - (wl.at or now)) > C.LEG_MAX_SECS then
+        if arrived or navDone or (now - (wl.at or now)) > legMaxSecs then
             if not arrived then stopMoving() end
             pursuit.wanderLoc = nil
-            runtime.anchorRoamNextAt = now + C.PAUSE_SECS
+            runtime.anchorRoamNextAt = now + pauseSecs
             return false
         end
-        runtime.moveTowardLoc(wl.x, wl.y, wl.z, C.ARRIVE_DIST)
+        runtime.moveTowardLoc(wl.x, wl.y, wl.z, arriveDist)
         return true
     end
     if now < (runtime.anchorRoamNextAt or 0) then return false end
@@ -22288,11 +22756,11 @@ function runtime.anchorRoamTick()
         local ok, has = pcall(function() return mq.TLO.Navigation.PathExists(string.format('locyx %.2f %.2f', y, x))() end)
         if ok and has then
             pursuit.wanderLoc = { x = x, y = y, z = z, at = now }
-            runtime.moveTowardLoc(x, y, z, C.ARRIVE_DIST)
+            runtime.moveTowardLoc(x, y, z, arriveDist)
             return true
         end
     end
-    runtime.anchorRoamNextAt = now + C.PAUSE_SECS -- nothing pathable this round; try again after the pause
+    runtime.anchorRoamNextAt = now + pauseSecs -- nothing pathable this round; try again after the pause
     return false
 end
 
@@ -22651,10 +23119,10 @@ function runtime.pullerTick()
         end
         if mq.TLO.Me.Combat() then return end -- already fighting something; don't pull yet
 
-        -- If current target is right next to camp (within 25 units), fight it directly
+        -- If current target is right next to camp (within 25 units by default), fight it directly
         local pt = mq.TLO.Target
         if pt() and (pt.Type() == 'NPC' or pt.Type() == 'Pet') and not pt.Dead() and pt.Type() ~= 'Corpse'
-            and not isSpawnPetOrPlayer(pt.ID()) and isHostileTarget(pt.ID()) and distToId(pt.ID()) <= 25
+            and not isSpawnPetOrPlayer(pt.ID()) and isHostileTarget(pt.ID()) and distToId(pt.ID()) <= runtime.tune('pull_direct_fight_dist')
             and not isUnreachable(pt.ID()) and not isIgnored(pt.CleanName()) then
             runtime.pullTargetId = pt.ID()
             runtime.pullState = 'FIGHTING'
@@ -22704,7 +23172,7 @@ function runtime.pullerTick()
             runtime.pullState = 'IDLE'; runtime.pullTargetId = 0
             return
         end
-        if aggroId and aggroId ~= runtime.pullTargetId and (distToId(runtime.pullTargetId) > 35 and not mq.TLO.Me.Combat()) then
+        if aggroId and aggroId ~= runtime.pullTargetId and (distToId(runtime.pullTargetId) > runtime.tune('pull_aggro_switch_dist') and not mq.TLO.Me.Combat()) then
             stopMoving()
             if runtime.setTarget(aggroId) then
                 print(string.format(
@@ -22823,7 +23291,7 @@ function runtime.pullerTick()
                     end
                     local petTgtId = 0
                     pcall(function() petTgtId = mq.TLO.Pet.Target.ID() or 0 end)
-                    if isXTargetId(tid) or distToId(tid) <= 35 or (petTgtId > 0 and petTgtId == tid) then
+                    if isXTargetId(tid) or distToId(tid) <= runtime.tune('pull_pet_tag_dist') or (petTgtId > 0 and petTgtId == tid) then
                         tagged = true
                     end
                 elseif tagStyle == 'Spell' then
@@ -24180,7 +24648,7 @@ local function combatTick()
                     elseif pullStyle == 'Pet' then
                         -- Pet pull: pets already dispatched above during approach
                         mq.cmd('/face fast')
-                        if distToId(id) <= 35 then
+                        if distToId(id) <= runtime.tune('pull_pet_tag_dist') then
                             engage = true
                         else
                             local petTgtId = 0
@@ -25998,8 +26466,7 @@ local function runMainLoop()
         end)
         if reDetectRequested then
             reDetectRequested = false
-            local detected = detectClasses(true) -- safe here -- main loop coroutine can yield/delay
-            if detected then myClasses = detected end
+            runtime.adoptClasses(detectClasses(true)) -- safe here -- main loop coroutine can yield/delay
         end
         -- (Cursor items are cleared on-demand prior to actions/mems or post-cast completion)
         if runtime.pendingCursorClearAt and os.clock() >= runtime.pendingCursorClearAt then

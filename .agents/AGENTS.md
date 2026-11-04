@@ -8,7 +8,7 @@ navigation for a "trio" of three EverQuest classes played on one character. It i
 written entirely in Lua 5.1 / LuaJIT and runs inside MacroQuest via
 `/lua run triune`.
 
-The code is one **core** script, `TAC/lua/triune.lua` (UI, loadout, combat loop,
+The code is one **core** script, `TAC/lua/triune/init.lua` (UI, loadout, combat loop,
 persistence, and the plugin manager), plus **in-process plugins** in
 `TAC/lua/tac/*.lua`. The companion tools that used to be standalone scripts
 (map, DPS, inventory, cursor, buffbot, spellbook, ...) are all plugins now: they
@@ -18,7 +18,7 @@ ImGui callback.
 ## Plugin Architecture (replaces the old Standalone File Rule)
 
 - **Discovery and loading.** The plugin manager (`initPluginManager` /
-  `runtime.pluginManager` in `triune.lua`) lists `lua/tac/` (lfs, else a
+  `runtime.pluginManager` in `triune/init.lua`) lists `lua/tac/` (lfs, else a
   directory listing, else a probe of the known shipped plugin names), runs each
   file's chunk and registers the returned table. A file that returns nothing,
   a non-table, or a table without an `id` / any hook is listed as a stray
@@ -79,7 +79,7 @@ enforces this. To change the look, edit `UI.pushTheme` only.
 
 | File | Role |
 |---|---|
-| `TAC/lua/triune.lua` | Core: main window UI and theme, loadout, combat loop, persistence, plugin manager. Entry point (`/lua run triune`). |
+| `TAC/lua/triune/init.lua` | Core: main window UI and theme, loadout, combat loop, persistence, plugin manager. Entry point (`/lua run triune`). |
 | `TAC/lua/tac/triune_log.lua` | Library module (`require('tac.triune_log')`), not a plugin: leveled logger, print() tee, diagnostic dump. |
 | `TAC/lua/tac/auto_aa.lua` | Auto AA: priority purchasing through the AA window, Fireworks cap spender, Auto AA window. |
 | `TAC/lua/tac/auto_accept.lua` | Auto-accept group / trade / expedition invites from whitelisted, group or guild players. |
@@ -155,7 +155,7 @@ Rules:
 
 ### Version Number Locations
 
-The canonical version is defined in `TAC/lua/triune.lua`:
+The canonical version is defined in `TAC/lua/triune/init.lua`:
 ```lua
 local VERSION           = '3.4'
 ```
@@ -165,7 +165,7 @@ The README must always reflect this value:
 Current version: **3.4**
 ```
 
-When you bump the version, update `TAC/lua/triune.lua` and the `README.md`.
+When you bump the version, update `TAC/lua/triune/init.lua` and the `README.md`.
 CI (`.github/workflows/ci.yml`) fails if these drift apart, and the release
 workflow refuses a tag that does not match `VERSION` or has no `## <version>`
 entry in `RELEASES.md`.
@@ -256,7 +256,7 @@ When adding new state, always add it to the appropriate table — never add a ba
 - Top-level `local var = ...` statements count as local variables in the main chunk.
 - Block locals at the file level (e.g. inside file-level `if ... end` blocks) count against the main chunk's active register slots.
 - **NEVER define bare top-level functions or state when extending `triune.lua`.** Attach functions and state to `runtime` (e.g., `function runtime.myHelper(...)`), `UI` (e.g., `function UI.myWindow(...)`), or other structured tables.
-- **ALWAYS verify local variable counts with `luac -l -p TAC/lua/triune.lua`**: Verify that the main chunk slots count is well below 200 (target `<= 185`). CI automatically enforces `luac -p` compilation and unit tests verify this threshold.
+- **ALWAYS verify local variable counts with `luac -l -p TAC/lua/triune/init.lua`**: Verify that the main chunk slots count is well below 200 (target `<= 185`). CI automatically enforces `luac -p` compilation and unit tests verify this threshold.
 
 
 ---

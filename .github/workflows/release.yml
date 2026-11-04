@@ -45,13 +45,13 @@ jobs:
             exit 1
           fi
           VER="${TAG#v}"; VER="${VER#V}"
-          MAIN=$(grep -oP "^local VERSION\s+= '\K[^']+" TAC/lua/triune.lua || true)
+          MAIN=$(grep -oP "^local VERSION\s+= '\K[^']+" TAC/lua/triune/init.lua || true)
           if [ -z "$MAIN" ]; then
-            echo "::error::Could not read local VERSION from TAC/lua/triune.lua"
+            echo "::error::Could not read local VERSION from TAC/lua/triune/init.lua"
             exit 1
           fi
           if [ "$VER" != "$MAIN" ]; then
-            echo "::error::Tag $TAG does not match local VERSION = '$MAIN' in TAC/lua/triune.lua"
+            echo "::error::Tag $TAG does not match local VERSION = '$MAIN' in TAC/lua/triune/init.lua"
             exit 1
           fi
           echo "Tag $TAG matches VERSION $MAIN"
@@ -137,7 +137,7 @@ jobs:
           for z in TriuneAutocombat-Update.zip TriuneAutocombat-full.zip; do
             echo "== $z ($(du -h "$z" | cut -f1))"
             unzip -l "$z" | grep -v '/MQ2Nav/'
-            unzip -l "$z" | grep -q 'lua/triune.lua'   || { echo "missing lua/triune.lua in $z"; exit 1; }
+            unzip -l "$z" | grep -q 'lua/triune/init.lua' || { echo "missing lua/triune/init.lua in $z"; exit 1; }
             unzip -l "$z" | grep -q 'gamedb/manifest.txt' || { echo "missing resources/gamedb in $z"; exit 1; }
           done
           unzip -l TriuneAutocombat-Update.zip | grep -q '\.navmesh' && { echo "update zip must not contain navmeshes"; exit 1; }

@@ -20,7 +20,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 LUA_DIR="$REPO_ROOT/TAC/lua"
 PLUGIN_DIR="$LUA_DIR/tac"
-CORE="$LUA_DIR/triune.lua"
+CORE="$LUA_DIR/triune/init.lua"
 
 fail=0
 

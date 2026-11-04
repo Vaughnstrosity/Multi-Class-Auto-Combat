@@ -169,7 +169,7 @@ end
 -- ---------------------------------------------------------------------------
 -- Source file path (relative to repo root)
 -- ---------------------------------------------------------------------------
-local srcPath = 'TAC/lua/triune.lua'
+local srcPath = 'TAC/lua/triune/init.lua'
 local src = readFile(srcPath)
 -- Auto AA engine source (migrated to the auto_aa plugin); global to stay under the 200-local cap
 AA_CONTENT = readFile('TAC/lua/tac/auto_aa.lua')
@@ -738,6 +738,140 @@ do
 end
 
 -- ============================================================================
+-- 8b. Class count (1-16 classes per character)
+-- ============================================================================
+print('--- class count ---')
+do
+    assert_eq(defaultCtrl().class_count, 3, 'defaultCtrl: class_count defaults to 3 (existing behaviour)')
+
+    local clamp = loadFunc(src, 'clampClassCount', { MAX_CLASSES = 16, DEFAULT_CLASS_COUNT = 3 })
+    assert_eq(clamp(1), 1, 'clampClassCount: 1 stays 1')
+    assert_eq(clamp(16), 16, 'clampClassCount: 16 stays 16')
+    assert_eq(clamp(0), 1, 'clampClassCount: 0 -> 1')
+    assert_eq(clamp(-5), 1, 'clampClassCount: negative -> 1')
+    assert_eq(clamp(17), 16, 'clampClassCount: 17 -> 16')
+    assert_eq(clamp(99), 16, 'clampClassCount: 99 -> 16')
+    assert_eq(clamp(5.9), 5, 'clampClassCount: fractional value is floored')
+    assert_eq(clamp('7'), 7, 'clampClassCount: numeric string is accepted')
+    assert_eq(clamp(nil), 3, 'clampClassCount: nil -> default of 3')
+    assert_eq(clamp('abc'), 3, 'clampClassCount: junk -> default of 3')
+
+    local function newEnv(count, classes)
+        return { MAX_CLASSES = 16, DEFAULT_CLASS_COUNT = 3, clampClassCount = clamp,
+                 ctrl = { class_count = count }, myClasses = classes }
+    end
+
+    local env = newEnv(8, { 'War' })
+    assert_eq(loadFunc(src, 'classLimit', env)(), 8, 'classLimit: reads ctrl.class_count')
+    env = newEnv(nil, {})
+    assert_eq(loadFunc(src, 'classLimit', env)(), 3, 'classLimit: missing count -> 3')
+
+    -- setClassCount trims the class list from the end
+    local cls = { 'War', 'Clr', 'Pal', 'Rng', 'SK' }
+    env = newEnv(5, cls)
+    assert_eq(loadFunc(src, 'setClassCount', env)(2), 2, 'setClassCount: returns the clamped count')
+    assert_eq(env.ctrl.class_count, 2, 'setClassCount: stores the count')
+    assert_tbl_eq(cls, { 'War', 'Clr' }, 'setClassCount: lowering drops classes from the end')
+    assert_eq(loadFunc(src, 'setClassCount', env)(40), 16, 'setClassCount: clamps to 16')
+    assert_tbl_eq(cls, { 'War', 'Clr' }, 'setClassCount: raising keeps the existing classes')
+
+    -- syncClassCount raises the count to cover a longer class list instead of dropping classes
+    cls = { 'War', 'Clr', 'Pal', 'Rng', 'SK' }
+    env = newEnv(3, cls)
+    loadFunc(src, 'syncClassCount', env)()
+    assert_eq(env.ctrl.class_count, 5, 'syncClassCount: count raised to fit 5 classes')
+    assert_eq(#cls, 5, 'syncClassCount: no class dropped')
+    env = newEnv(nil, { 'War', 'Clr' })
+    loadFunc(src, 'syncClassCount', env)()
+    assert_eq(env.ctrl.class_count, 3, 'syncClassCount: old save without a count -> 3')
+
+    -- adoptClasses: detection of more classes than the count raises it, capped at 16
+    cls = { 'Old' }
+    env = newEnv(3, cls)
+    env.syncClassCount = loadFunc(src, 'syncClassCount', env)
+    local adopt = loadFunc(src, 'adoptClasses', env)
+    assert_true(adopt({ 'War', 'Clr', 'Pal', 'Rng' }), 'adoptClasses: accepts a detected list')
+    assert_tbl_eq(cls, { 'War', 'Clr', 'Pal', 'Rng' }, 'adoptClasses: replaces the class list in place')
+    assert_eq(env.ctrl.class_count, 4, 'adoptClasses: count raised to 4')
+    local many = {}
+    for i = 1, 20 do many[i] = 'C' .. i end
+    adopt(many)
+    assert_eq(#cls, 16, 'adoptClasses: list capped at 16')
+    assert_eq(env.ctrl.class_count, 16, 'adoptClasses: count capped at 16')
+    assert_true(not adopt({}), 'adoptClasses: empty list is rejected')
+    assert_true(not adopt(nil), 'adoptClasses: nil is rejected')
+    assert_eq(#cls, 16, 'adoptClasses: a rejected list leaves the classes alone')
+
+    -- no slot loop may stay hard-coded to three classes
+    assert_true(src:find('for i = 1, 3 do\n        local cls = myClasses%[i%]', 1) == nil
+        and src:find('for i = 1, 3 do\n            local cls = myClasses%[i%]', 1) == nil,
+        'triune.lua: no class-slot loop is hard-coded to 3')
+    assert_eq(select(2, src:gsub('runtime%.CLASS_PALETTE = {', '')), 1, 'triune.lua: one class palette')
+
+    -- Puller radius sliders go up to 10000 (was 2000), from one constant
+    assert_true(src:find('runtime.MAX_SEARCH_RADIUS = 10000', 1, true) ~= nil, 'triune.lua: MAX_SEARCH_RADIUS is 10000')
+    assert_true(src:find("ImGui.SliderInt('Search Radius', ctrl.hunter_radius or 1500, 50, runtime.MAX_SEARCH_RADIUS)", 1, true) ~= nil,
+        'triune.lua: Search Radius slider uses MAX_SEARCH_RADIUS')
+    assert_true(src:find("curRadius, 1, runtime.MAX_SEARCH_RADIUS)", 1, true) ~= nil,
+        'triune.lua: Combat Radius slider uses MAX_SEARCH_RADIUS (it caps Search Radius)')
+end
+
+-- ============================================================================
+-- 8c. Advanced Tuning: distances and timers that used to be literals
+-- ============================================================================
+print('--- advanced tuning ---')
+do
+    local rt = {}
+    local tenv = { ctrl = {}, runtime = rt }
+    rt.tuningDefs = loadFunc(src, 'tuningDefs', tenv)
+    rt.tune = loadFunc(src, 'tune', tenv)
+
+    -- every default equals the literal it replaced, so behaviour is unchanged until a setting is touched
+    local expected = {
+        pet_scan_radius = 150, pet_snapshot_radius = 100, pet_summon_grace_sec = 12,
+        pet_summon_refused_backoff_sec = 60, pet_buff_cache_sec = 300,
+        pull_direct_fight_dist = 25, pull_aggro_switch_dist = 35, pull_pet_tag_dist = 35,
+        unreachable_forget_sec = 60, roam_pause_sec = 5, roam_leg_max_sec = 40, roam_arrive_dist = 10,
+        rez_max_attempts = 3, rez_nav_max_attempts = 3, rez_search_range = 2500,
+    }
+    local count = 0
+    for key, want in pairs(expected) do
+        count = count + 1
+        assert_eq(rt.tune(key), want, 'tune: default of ' .. key)
+    end
+    assert_eq(#rt.tuningDefs(), count, 'tune: exactly the expected tunables are defined')
+    for _, d in ipairs(rt.tuningDefs()) do
+        assert_true(d.default >= d.min and d.default <= d.max, 'tune: ' .. d.key .. ' default is inside its limits')
+        assert_true(type(d.label) == 'string' and d.label ~= '' and type(d.tip) == 'string' and d.tip ~= '' and d.group ~= nil,
+            'tune: ' .. d.key .. ' has a label, tooltip and group for the UI')
+    end
+
+    -- a set value is used; out-of-range, fractional and junk values are made safe
+    tenv.ctrl.pet_scan_radius = 400
+    assert_eq(rt.tune('pet_scan_radius'), 400, 'tune: a set value is used')
+    tenv.ctrl.pet_scan_radius = 5
+    assert_eq(rt.tune('pet_scan_radius'), 25, 'tune: below the minimum -> minimum')
+    tenv.ctrl.pet_scan_radius = 999999
+    assert_eq(rt.tune('pet_scan_radius'), 2000, 'tune: above the maximum -> maximum')
+    tenv.ctrl.pet_scan_radius = 200.4
+    assert_eq(rt.tune('pet_scan_radius'), 200, 'tune: fractional values are rounded')
+    tenv.ctrl.pet_scan_radius = 'junk'
+    assert_eq(rt.tune('pet_scan_radius'), 150, 'tune: junk -> default')
+    tenv.ctrl.pet_scan_radius = nil
+    assert_eq(rt.tune('pet_scan_radius'), 150, 'tune: unset -> default')
+    assert_eq(rt.tune('no_such_key'), nil, 'tune: unknown key -> nil')
+
+    -- the literals are gone from the code that now reads the settings
+    for _, literal in ipairs({ "'pet radius 150'", "'pet radius 100'", 'PET_SUMMON_GRACE_SEC', 'deadAllyCorpseId(2500)',
+                               'attempts.count >= 3', 'navAttempts >= 3', 'C.PAUSE_SECS', 'C.LEG_MAX_SECS', 'C.ARRIVE_DIST',
+                               "ctrl.camp_radius or 100, 10, 500)", 'ctrl.xtar_nav_dist or 150, 25, 300)' }) do
+        assert_true(src:find(literal, 1, true) == nil, 'triune.lua: hard-coded ' .. literal .. ' is gone')
+    end
+    assert_true(src:find("function UI.drawAdvancedTuning()", 1, true) ~= nil
+        and src:find("\n    UI.drawAdvancedTuning()\n", 1, true) ~= nil, 'triune.lua: Advanced Tuning section exists and is drawn')
+end
+
+-- ============================================================================
 -- 9.  isActionSkill(name) & defaultActionEntry
 -- ============================================================================
 print('--- isActionSkill / isSpecialSkill ---')
@@ -1069,7 +1203,7 @@ assert_nil(extractConName(''), 'con: empty')
 -- ============================================================================
 print('--- isDetrimentalSpell & createCastTracker ---')
 
-local triuneSrc = readFile('TAC/lua/triune.lua')
+local triuneSrc = readFile('TAC/lua/triune/init.lua')
 local isDetrimentalSpell = loadstring(extractFunction(triuneSrc, 'isDetrimentalSpell') .. '\nreturn isDetrimentalSpell')()
 
 -- A. isDetrimentalSpell classification tests
@@ -3523,7 +3657,7 @@ do
     assert_true(canCastOnNpc(tracker, 1002, 'Tashani', 1), 'new mob allows cast')
 
     -- Source verification for triune.lua
-    local triuneContent = readFile('TAC/lua/triune.lua')
+    local triuneContent = readFile('TAC/lua/triune/init.lua')
     assert_true(triuneContent:find("ImGui.Combo%('##mc'") ~= nil, 'triune.lua uses ##mc combo for max_casts')
     assert_true(triuneContent:find("maxCastOpts") ~= nil, 'triune.lua defines maxCastOpts (Unl to 10)')
     assert_true(triuneContent:find("runtime.npcCastCounts") ~= nil, 'triune.lua tracks npcCastCounts')
@@ -3627,7 +3761,7 @@ do
     assert_true(not isT2Active, 'timer group: T2 has expired')
 
     -- E. Cooldowns is a popout window only (no main-window tab)
-    local triuneContent = readFile('TAC/lua/triune.lua')
+    local triuneContent = readFile('TAC/lua/triune/init.lua')
     local cdContent = readFile('TAC/lua/tac/hud_cooldowns.lua')
     assert_true(triuneContent:find('function UI.drawCooldownsTab()', 1, true) == nil, 'cooldown window: UI.drawCooldownsTab removed from triune.lua (hud_cooldowns plugin)')
     assert_true(cdContent:find("ImGui.BeginTabItem('Cooldowns')", 1, true) == nil, 'cooldown window: hud_cooldowns no longer contributes a main-window tab')
@@ -3992,7 +4126,7 @@ do
     assert_eq(matchAAName('Combat Stability', 'Combat Agility'), false, 'match: different ability false')
 
     -- K. Verify Auto AA tab & functions in triune.lua
-    local triuneContent = readFile('TAC/lua/triune.lua')
+    local triuneContent = readFile('TAC/lua/triune/init.lua')
     assert_true(AA_CONTENT:find("function AA.drawWindow()") ~= nil, 'auto_aa defines AA.drawWindow (popout Auto AA window)')
     assert_true(AA_CONTENT:find("AA.drawWindow()") ~= nil, 'auto_aa invokes AA.drawWindow from onDrawUI')
     assert_true(AA_CONTENT:find("AA.checkAutoSpendAA()") ~= nil, 'triune.lua includes AA.checkAutoSpendAA check')
@@ -4119,7 +4253,7 @@ do
     assert_eq(trioMixed[3].scope, 'enc', 'slot 3 scope: enc')
 
     -- E. triune.lua Source Verification
-    local triuneContent = readFile('TAC/lua/triune.lua')
+    local triuneContent = readFile('TAC/lua/triune/init.lua')
     assert_true(triuneContent:find("function UI.drawPetControlTab()") ~= nil, 'triune.lua defines UI.drawPetControlTab')
     assert_true(triuneContent:find("ImGui.BeginTabItem%('Pets'%)") ~= nil, 'triune.lua uses Pets as tab label')
     local tabOrderMatch = triuneContent:find("UI.drawControlTab%(%)[%s\r\n]+UI.drawPetControlTab%(%)[%s\r\n]+UI.drawGemTab%(%)")
@@ -4146,7 +4280,7 @@ end
 -- ============================================================================
 print('--- ImGui Child Window Safety Checks ---')
 do
-    local triuneContent = readFile('TAC/lua/triune.lua')
+    local triuneContent = readFile('TAC/lua/triune/init.lua')
     assert_true(triuneContent:find("ImGui.EndChild%(%)[%s\r\n]+end[%s\r\n]+ImGui.PopStyleVar%(2%)") == nil,
         'lists do not place EndChild inside BeginChild if block')
     assert_true(triuneContent:find("end[%s\r\n]+ImGui.EndChild%(%)[%s\r\n]+ImGui.PopStyleVar%(2%)") ~= nil,
@@ -4186,7 +4320,7 @@ end
 -- ============================================================================
 print('--- Ability Health Threshold & Feign Death Evaluation ---')
 do
-    local triuneContent = readFile('TAC/lua/triune.lua')
+    local triuneContent = readFile('TAC/lua/triune/init.lua')
 
     -- Verify UI guard ensures Autoskill checkbox is only shown for eligible skills
     assert_true(triuneContent:find("if isAutoskillEligible%(nm%) then[%s\r\n]+ImGui%.SameLine%(%)[%s\r\n]+local asVal = ImGui%.Checkbox%('Auto##as'") ~= nil,
@@ -5045,7 +5179,11 @@ do
     assert_eq(getPrimarySpellForGem(1), nil, 'no loadout gems -> nil')
 
     -- 2. Sanitization of decoupled loadout entries (real runtime.applyEntry)
-    local applyEnv = { loadout = {}, myClasses = { 'War' }, clearFilteredSpellsCache = function() end }
+    local applyEnv = { loadout = {}, myClasses = { 'War' }, clearFilteredSpellsCache = function() end,
+                       ctrl = {}, MAX_CLASSES = 16, DEFAULT_CLASS_COUNT = 3 }
+    -- applyEntry ends by syncing the class count, so give it the real helpers
+    applyEnv.clampClassCount = loadFunc(src, 'clampClassCount', applyEnv)
+    applyEnv.syncClassCount = loadFunc(src, 'syncClassCount', applyEnv)
     local applyEntry = loadFunc(src, 'applyEntry', applyEnv)
     applyEntry({
         gems = {
@@ -5162,7 +5300,7 @@ do
     assert_eq(existingLoadout[5].spell, 'Downtime Buff 2', 'retained gem 12 line')
 
     -- 5. triune.lua source verification for Import Bar button & slash command
-    local triuneCode = readFile('TAC/lua/triune.lua')
+    local triuneCode = readFile('TAC/lua/triune/init.lua')
     assert_true(triuneCode:find("function runtime.importCurrentGems", 1, true) ~= nil, 'triune.lua defines runtime.importCurrentGems')
     assert_true(triuneCode:find("Import Bar##importBarBtn", 1, true) ~= nil, 'triune.lua includes Import Bar button in UI.drawGemTabHeader')
     assert_true(triuneCode:find("Auto-populate spell lines based on what is currently memorized on your spell gems.", 1, true) ~= nil, 'triune.lua includes descriptive tooltip on Import Bar')
@@ -5736,7 +5874,7 @@ end
 print('--- Main Chunk Local Variables Limit Verification ---')
 do
     local files = {
-        'TAC/lua/triune.lua',
+        'TAC/lua/triune/init.lua',
         'TAC/lua/tac/spellbook.lua',
         'TAC/lua/tac/auto_aa.lua',
         'TAC/lua/tac/hud_cooldowns.lua',
@@ -5770,7 +5908,7 @@ do
             local slots = tonumber(out:match('(%d+)%s+slots'))
             assert_true(slots ~= nil, string.format('%s -l lists %s (no syntax / 200 local limit error); output: %s', luac, filePath, out:sub(1, 200)))
             assert_true(not out:find('too many local variables'), string.format('%s does not exceed 200 local variables limit', filePath))
-            if slots and filePath == 'TAC/lua/triune.lua' then
+            if slots and filePath == 'TAC/lua/triune/init.lua' then
                 assert_true(slots <= 185, string.format('triune.lua main chunk slots (%d) has comfortable buffer under 200 limit (<= 185)', slots))
             end
         end
@@ -6253,7 +6391,7 @@ do
     print = realPrint
 
     -- 3. The core no longer carries its own copy of the auto-accept engine
-    local triuneSrc = readFile('TAC/lua/triune.lua')
+    local triuneSrc = readFile('TAC/lua/triune/init.lua')
     assert_true(triuneSrc:find('function runtime%.checkAutoAccept') == nil,
         'Suite 55: runtime.checkAutoAccept removed from triune.lua (owned by auto_accept plugin)')
     assert_true(triuneSrc:find('function runtime%.isAutoAcceptAllowed') == nil,
@@ -6657,7 +6795,7 @@ do
     assert_eq(calcMaxMeleeDistance(50, 45), 50, 'Dragon spawnReach 45 with userDist 50 max reach is 50')
 
     -- 7. triune.lua source code assertions: verify hardcoded clamps were eliminated
-    local triuneCode = readFile('TAC/lua/triune.lua')
+    local triuneCode = readFile('TAC/lua/triune/init.lua')
     assert_true(triuneCode:find("math.min(12, (ctrl and ctrl.melee_dist) or 12)", 1, true) == nil,
         'triune.lua eliminated hardcoded 12 clamp in getBehindLoc')
     assert_true(triuneCode:find("math.min(userDist, maxSafe)", 1, true) == nil,
@@ -7059,7 +7197,7 @@ end
 -- ============================================================================
 do
     print('--- Suite 62: AA Special Tab Scan Loop Prevention ---')
-    local triuneContent = readFile('TAC/lua/triune.lua')
+    local triuneContent = readFile('TAC/lua/triune/init.lua')
 
     -- 1. Verify readSpecialTabOnce marks read as done even on failure and never retries
     local mockRuntime = {
@@ -7252,7 +7390,7 @@ do
     assert_true(list3[1].cost >= 1, 'Suite 63: fallback cost is positive (>= 1)')
 
     -- 6. Verify triune.lua defines enhanced recursive scanning and UI list extraction
-    local triuneContent = readFile('TAC/lua/triune.lua')
+    local triuneContent = readFile('TAC/lua/triune/init.lua')
     assert_true(AA_CONTENT:find("AAW_ArchList") ~= nil, 'Suite 63: triune.lua searches AAW_ArchList')
     assert_true(AA_CONTENT:find("curMaxTxt:match") ~= nil, 'Suite 63: triune.lua parses curMaxTxt column')
     assert_true(AA_CONTENT:find("costTxt:match") ~= nil, 'Suite 63: triune.lua parses costTxt column')
@@ -7342,7 +7480,7 @@ do
 
     -- 4. Source guards: the AA window trainer is the only purchase path.
     --    Nothing may load, drive or configure MQ2AAspend any more.
-    local triuneContent = readFile('TAC/lua/triune.lua')
+    local triuneContent = readFile('TAC/lua/triune/init.lua')
     local aaLower = AA_CONTENT:lower()
     assert_true(aaLower:find('/aaspend', 1, true) == nil, 'Suite 64: auto_aa.lua issues no /aaspend command')
     assert_true(aaLower:find('mq2aaspend load', 1, true) == nil, 'Suite 64: auto_aa.lua never loads the MQ2AAspend plugin')
@@ -7383,6 +7521,11 @@ do
         noteUnreachableBurst = function(id) hooks.burst[#hooks.burst + 1] = id end,
         clearDetour = function() hooks.detours = hooks.detours + 1 end,
     }
+    -- isUnreachable reads its TTL from the 'Unreachable Mob Blacklist' tunable
+    unreachEnv.ctrl = {}
+    unreachEnv.runtime = {}
+    unreachEnv.runtime.tuningDefs = loadFunc(src, 'tuningDefs', unreachEnv)
+    unreachEnv.runtime.tune = loadFunc(src, 'tune', unreachEnv)
     local markUnreachable = loadFunc(src, 'markUnreachable', unreachEnv)
     local isUnreachable = loadFunc(src, 'isUnreachable', unreachEnv)
     local function at(t, id) clock.now = t return isUnreachable(id) end
@@ -7396,6 +7539,16 @@ do
     assert_eq(hooks.burst[1], 1001, 'Suite 65: markUnreachable feeds the unreachable-burst detector')
     assert_eq(hooks.detours, 1, 'Suite 65: markUnreachable clears any active detour')
 
+    -- the blacklist time is a setting (default 60 s)
+    unreachEnv.ctrl.unreachable_forget_sec = 300
+    clock.now = 100.0; markUnreachable(1003)
+    assert_true(at(399.0, 1003), 'Suite 65: with the blacklist set to 300 s a mob is still ignored at +299 s')
+    assert_true(not at(401.0, 1003), 'Suite 65: and is forgotten after 300 s')
+    unreachEnv.ctrl.unreachable_forget_sec = 1
+    clock.now = 500.0; markUnreachable(1004)
+    assert_true(at(509.0, 1004), 'Suite 65: a value below the 10 s minimum is clamped up to 10 s')
+    unreachEnv.ctrl.unreachable_forget_sec = nil
+
     -- 2. A forced target that turns out to be unreachable is released
     local unreachRuntime = debug.getfenv(markUnreachable).runtime
     unreachRuntime.xtForceId = 1003
@@ -7407,7 +7560,7 @@ do
 
     -- 3. Source code validation in triune.lua (the approach watchdog lives
     -- inline in the combat tick, so it is checked by source contract)
-    local triuneContent = readFile('TAC/lua/triune.lua')
+    local triuneContent = readFile('TAC/lua/triune/init.lua')
     assert_true(triuneContent:find("pursuit.noPathFails") ~= nil, 'Suite 65: triune.lua tracks noPathFails')
     assert_true(triuneContent:find("No navigation path to target") ~= nil, 'Suite 65: triune.lua logs no navigation path to target')
     assert_true(triuneContent:find("Target #%%d %(%%s%) obstructed after 4 \"cannot hit\" attempts") ~= nil, 'Suite 65: triune.lua abandons after 4 cannot hit attempts')
@@ -7477,9 +7630,9 @@ do
     end
     assert_eq(countAliveNPCXtarget(mockDeadOnlyXtar), 0, 'Suite 66: countAliveNPCXtarget returns 0 when all XTargets dead')
 
-    -- 4. Source code validation in TAC/lua/triune.lua (the slain handler is
+    -- 4. Source code validation in TAC/lua/triune/init.lua (the slain handler is
     -- an inline event callback, so it is checked by source contract)
-    local triuneContent = readFile('TAC/lua/triune.lua')
+    local triuneContent = readFile('TAC/lua/triune/init.lua')
     assert_true(triuneContent:find("TriuneSlain1") ~= nil, 'Suite 66: triune.lua registers TriuneSlain1 event')
     assert_true(triuneContent:find("TriuneSlain2") ~= nil, 'Suite 66: triune.lua registers TriuneSlain2 event')
     assert_true(triuneContent:find("curHp and curHp <= 0") == nil, 'Suite 66: triune.lua does not falsely treat 0 HP as dead')
@@ -7704,8 +7857,8 @@ do
     assert_eq(task.step, 'finish', 'Suite 67: wait_open aborts cleanly to finish when retries exceeded')
     assert_true(loggedAbort, 'Suite 67: logged clear abort warning when window failed to open')
 
-    -- 5. Source code validation in TAC/lua/triune.lua
-    local triuneContent = readFile('TAC/lua/triune.lua')
+    -- 5. Source code validation in TAC/lua/triune/init.lua
+    local triuneContent = readFile('TAC/lua/triune/init.lua')
     assert_true(AA_CONTENT:find("AA.getAAWindow") ~= nil, 'Suite 67: triune.lua defines AA.getAAWindow')
     assert_true(AA_CONTENT:find("AA.getAAWindowName") ~= nil, 'Suite 67: triune.lua defines AA.getAAWindowName')
     assert_true(AA_CONTENT:find("AA.isAAWindowOpen") ~= nil, 'Suite 67: triune.lua defines AA.isAAWindowOpen')
@@ -7801,8 +7954,8 @@ do
     assert_true(cache['bloodlust'] ~= nil, 'Suite 68: Cache preserves unpurchased AA with id 0 and maxRank 0')
     assert_true(cache['mend'] == nil, 'Suite 68: Cache pruned true character skill Mend')
 
-    -- 3. Source code inspection of TAC/lua/triune.lua
-    local triuneContent = readFile('TAC/lua/triune.lua')
+    -- 3. Source code inspection of TAC/lua/triune/init.lua
+    local triuneContent = readFile('TAC/lua/triune/init.lua')
     assert_true(AA_CONTENT:find("AA.GENERAL_AAS = {") ~= nil, 'Suite 68: triune.lua defines GENERAL_AAS catalog')
     assert_true(AA_CONTENT:find("'Physical Enhancement'") ~= nil, 'Suite 68: NORRATH_AAS includes Physical Enhancement')
     assert_true(AA_CONTENT:find("'Bloodlust'") ~= nil, 'Suite 68: NORRATH_AAS includes Bloodlust')
@@ -7992,7 +8145,7 @@ do
     assert_eq(simPreCheckAA(65, 60, true), true, 'Suite 69: Pre-check accepts ability when level and prerequisites are met')
 
     -- 6. Verify triune.lua source code definitions
-    local triuneContent = readFile('TAC/lua/triune.lua')
+    local triuneContent = readFile('TAC/lua/triune/init.lua')
     assert_true(AA_CONTENT:find("task%.step == 'click_train'") ~= nil, 'Suite 69: triune.lua implements click_train step in processAATrainWorkflow')
     assert_true(AA_CONTENT:find("AAW_TrainButton") ~= nil, 'Suite 69: triune.lua clicks train button in UI')
     assert_true(AA_CONTENT:find("targetTab = prefTab") ~= nil, 'Suite 69: triune.lua sets target tab based on ability type')
@@ -8106,8 +8259,8 @@ do
     assert_true(pollutedCache['harmtouch'] == nil, 'Suite 70: Cache PRUNES foreign Harm Touch for Warrior')
     assert_true(pollutedCache['divinearbitration'] == nil, 'Suite 70: Cache PRUNES foreign Divine Arbitration for Warrior')
 
-    -- 3. Source code inspection of TAC/lua/triune.lua
-    local triuneContent = readFile('TAC/lua/triune.lua')
+    -- 3. Source code inspection of TAC/lua/triune/init.lua
+    local triuneContent = readFile('TAC/lua/triune/init.lua')
     assert_true(AA_CONTENT:find("AA.CLASS_ARCHETYPES = {") ~= nil, 'Suite 70: triune.lua defines CLASS_ARCHETYPES')
     assert_true(AA_CONTENT:find("AA.ARCHETYPE_CLASSES = {") ~= nil, 'Suite 70: triune.lua defines ARCHETYPE_CLASSES')
     assert_true(AA_CONTENT:find("AA.ARCHETYPE_RESTRICTIONS = {") ~= nil, 'Suite 70: triune.lua defines ARCHETYPE_RESTRICTIONS')
@@ -8244,8 +8397,8 @@ do
     assert_true(aaTabTip:find('Rank: 1/3') ~= nil, 'Suite 71: AA tab tooltip has rank')
     assert_true(aaTabTip:find('Taunts the target') ~= nil, 'Suite 71: AA tab tooltip has wrapped description')
 
-    -- 4. Source code inspection of TAC/lua/triune.lua
-    local triuneContent = readFile('TAC/lua/triune.lua')
+    -- 4. Source code inspection of TAC/lua/triune/init.lua
+    local triuneContent = readFile('TAC/lua/triune/init.lua')
     assert_true(triuneContent:find("function runtime.wrapText%(text, maxLineLen%)") ~= nil,
         'Suite 71: triune.lua defines runtime.wrapText')
     assert_true(triuneContent:find("function runtime.getAADescription%(itm%)") ~= nil,
@@ -8329,8 +8482,8 @@ do
     assert_eq(simCheckWatchdog(100.0, 105.0), false, 'Suite 72: Watchdog does not trigger before 10s')
     assert_true(simCheckWatchdog(100.0, 110.1), 'Suite 72: Watchdog triggers and clears task after 10s')
 
-    -- 6. Source code inspection of TAC/lua/triune.lua
-    local triuneContent = readFile('TAC/lua/triune.lua')
+    -- 6. Source code inspection of TAC/lua/triune/init.lua
+    local triuneContent = readFile('TAC/lua/triune/init.lua')
     assert_true(AA_CONTENT:find("AA%.pendingAATrain") ~= nil,
         'Suite 72: triune.lua defines AA.pendingAATrain')
     assert_true(AA_CONTENT:find("step = 'open'") ~= nil,
@@ -8381,8 +8534,8 @@ do
     assert_eq(canBuyBg, false, 'Suite 73: Background check without allowStop rejected while moving')
     assert_eq(didStopBg, false, 'Suite 73: Background check does not stop movement')
 
-    -- 2. Source code inspection of TAC/lua/triune.lua
-    local triuneContent = readFile('TAC/lua/triune.lua')
+    -- 2. Source code inspection of TAC/lua/triune/init.lua
+    local triuneContent = readFile('TAC/lua/triune/init.lua')
     assert_true(AA_CONTENT:find("function AA%.checkAutoSpendAA%(allowStop%)") ~= nil,
         'Suite 73: triune.lua defines AA.checkAutoSpendAA(allowStop)')
     assert_true(AA_CONTENT:find("function AA%.startAATrainWorkflow%(targetName, allowStop%)") ~= nil,
@@ -8516,7 +8669,7 @@ do
     assert_eq(nativePursuit.lastNavTargetId, 'native_spawn_77', 'Suite 74: native recovery tags lastNavTargetId')
 
     -- 4. Source inspections
-    local triuneContent = readFile('TAC/lua/triune.lua')
+    local triuneContent = readFile('TAC/lua/triune/init.lua')
     assert_true(triuneContent:find('function runtime%.isPlayerOffMesh') ~= nil,
         'Suite 74: triune.lua defines isPlayerOffMesh')
     assert_true(triuneContent:find('function runtime%.tryOffMeshRecovery') ~= nil,
@@ -8538,7 +8691,7 @@ end
 -- ============================================================================
 do
     print('--- Suite 75: Popout Unit Frames HUD Window Logic & Configuration ---')
-    local triuneContent = readFile('TAC/lua/triune.lua')
+    local triuneContent = readFile('TAC/lua/triune/init.lua')
     local readmeContent = readFile('README.md')
 
     -- 1. Verify defaultCtrl defaults
@@ -8672,7 +8825,7 @@ end
 -- ============================================================================
 do
     print('--- Suite 76: Popout Group Window Logic & Configuration ---')
-    local triuneContent = readFile('TAC/lua/triune.lua')
+    local triuneContent = readFile('TAC/lua/triune/init.lua')
     local readmeContent = readFile('README.md')
 
     -- 1. Verify defaultCtrl defaults
@@ -8765,7 +8918,7 @@ end
 -- ============================================================================
 do
     print('--- Suite 77: Popout Effects & Songs Window Logic & Configuration ---')
-    local fTriune = assert(io.open('TAC/lua/triune.lua', 'r'))
+    local fTriune = assert(io.open('TAC/lua/triune/init.lua', 'r'))
     local triuneContent = fTriune:read('*all')
     fTriune:close()
 
@@ -8929,7 +9082,7 @@ end
 -- ============================================================================
 print('--- Suite 78: Popout Extended Target (XTarget) Window Logic & Configuration ---')
 do
-    local fTriune = assert(io.open('TAC/lua/triune.lua', 'r'))
+    local fTriune = assert(io.open('TAC/lua/triune/init.lua', 'r'))
     local triuneContent = fTriune:read('*all')
     fTriune:close()
 
@@ -9045,7 +9198,7 @@ end
 -- ============================================================================
 print('--- Suite 79: Popout Spell Gem Bar Window Logic & Configuration ---')
 do
-    local fTriune = assert(io.open('TAC/lua/triune.lua', 'r'))
+    local fTriune = assert(io.open('TAC/lua/triune/init.lua', 'r'))
     local triuneContent = fTriune:read('*all')
     fTriune:close()
 
@@ -9207,7 +9360,7 @@ end
 -- ============================================================================
 print('--- Suite 80: Popout Character Stats, Inventory & Currency Window Removal ---')
 do
-    local fTriune = assert(io.open('TAC/lua/triune.lua', 'r'))
+    local fTriune = assert(io.open('TAC/lua/triune/init.lua', 'r'))
     local triuneContent = fTriune:read('*all')
     fTriune:close()
 
@@ -9297,7 +9450,7 @@ end
 -- ============================================================================
 print('--- Suite 81: Window Settings & Position Save/Restore Logic ---')
 do
-    local fTriune = assert(io.open('TAC/lua/triune.lua', 'r'))
+    local fTriune = assert(io.open('TAC/lua/triune/init.lua', 'r'))
     local triuneContent = fTriune:read('*all')
     fTriune:close()
 
@@ -9480,8 +9633,8 @@ do
     assert_eq(filtered[1].name, 'Combat Agility', 'Suite 82: First valid item is Combat Agility')
     assert_eq(filtered[2].name, 'Planar Power', 'Suite 82: Second valid item is Planar Power')
 
-    -- 4. Source code verification of TAC/lua/triune.lua
-    local triuneContent = readFile('TAC/lua/triune.lua')
+    -- 4. Source code verification of TAC/lua/triune/init.lua
+    local triuneContent = readFile('TAC/lua/triune/init.lua')
     assert_true(AA_CONTENT:find("if r > 0 and mr <= 0 then%s+isForeignStub = true") ~= nil,
         'Suite 82: triune.lua detects foreign stubs with r > 0 and mr <= 0')
     assert_true(AA_CONTENT:find("if not maxRank or maxRank <= 0 then%s+return%s+end") ~= nil,
@@ -9499,7 +9652,7 @@ end
 -- ============================================================================
 print('--- Suite 83: Combat Styles (Melee / Ranged / Spell) ---')
 do
-    local triuneContent = readFile('TAC/lua/triune.lua')
+    local triuneContent = readFile('TAC/lua/triune/init.lua')
 
     -- 1. Settings tab exposes all three styles and both distance sliders
     assert_true(triuneContent:find("RadioButton('Melee', ctrl.combat_style == 'Melee')", 1, true) ~= nil,
@@ -9676,7 +9829,7 @@ end
 -- ============================================================================
 print('--- Suite 84: Auto AA Minimum 5 AA Bank Slider & Auto-Purchase Reliability ---')
 do
-    local triuneContent = readFile('TAC/lua/triune.lua')
+    local triuneContent = readFile('TAC/lua/triune/init.lua')
 
     -- 1. Verify bank slider in UI enforces a minimum of 5 AA
     assert_true(AA_CONTENT:find("SliderInt('##autoAaThresh', curThresh, 5, 100, 'Bank: %d')", 1, true) ~= nil,
@@ -9714,7 +9867,7 @@ end
 -- ============================================================================
 print('--- Suite 85: Auto AA Fireworks & Summon Firework (/alt act 17788) Reliability ---')
 do
-    local triuneContent = readFile('TAC/lua/triune.lua')
+    local triuneContent = readFile('TAC/lua/triune/init.lua')
 
     -- 1. Verify post-purchase auto-summon and cooldown checks
     assert_true(AA_CONTENT:find("AA.scheduleFireworksSummon(fwId, task.name)", 1, true) ~= nil,
@@ -10048,7 +10201,7 @@ do
     assert_eq(testTickCount, 4, 'Suite 86: healthy plugin keeps running unaffected by sibling crash')
 
     -- 5. Source verification in triune.lua
-    local triuneContent = readFile('TAC/lua/triune.lua')
+    local triuneContent = readFile('TAC/lua/triune/init.lua')
     assert_true(triuneContent:find('function runtime.initPluginManager()', 1, true) ~= nil,
         'Suite 86: runtime.initPluginManager defined in triune.lua')
     assert_true(triuneContent:find('function UI.drawPluginsTab()', 1, true) ~= nil,
@@ -10145,7 +10298,7 @@ end
 -- ============================================================================
 do
     print('--- Suite 87: Plugin Manager Hardening & Shipped Plugin Contract ---')
-    local triuneContent = readFile('TAC/lua/triune.lua')
+    local triuneContent = readFile('TAC/lua/triune/init.lua')
     local pAA87 = assert(loadfile('TAC/lua/tac/auto_accept.lua'))()
 
     -- 1. Manager hardening: live ctrl, single fiber factory, safe rescan, draw-error isolation
@@ -11420,6 +11573,19 @@ do
         }, { __call = function() return sp ~= nil end })
     end
     local function matches(filter)
+        -- 'pet name "token"': zone-wide substring match on the spawn name (typed pet names)
+        local nameTok = filter:match('^pet name "(.-)"$')
+        if nameTok then
+            local byName = {}
+            for id, sp in pairs(world.spawns) do
+                if not sp.dead and (sp.type or 'Pet') == 'Pet'
+                    and string.find(string.lower(sp.name), string.lower(nameTok), 1, true) then
+                    byName[#byName + 1] = id
+                end
+            end
+            table.sort(byName, function(a, b) return (world.spawns[a].dist or 0) < (world.spawns[b].dist or 0) end)
+            return byName
+        end
         local kind, radius = filter:match('^(%a+) radius (%d+)$')
         radius = tonumber(radius) or 0
         local ids = {}
@@ -11443,6 +11609,7 @@ do
     local PET_CLASSES = { Nec = true, Mag = true, Bst = true, Enc = true, Shm = true, SK = true, Dru = true, Brd = true }
     -- loadFunc snapshots the env at load time, so these tables are reset in place
     local petState, ctrl, myClasses, runtime, printed = {}, {}, {}, {}, {}
+    local namedFns = {} -- the typed-pet-name runtime helpers (loaded below, re-attached on every reset)
     local env = { petState = petState, ctrl = ctrl, myClasses = myClasses, runtime = runtime }
     local function clearTable(t) for k in pairs(t) do t[k] = nil end end
     local function resetWorld(classes, names)
@@ -11454,6 +11621,7 @@ do
         ctrl.pet_names = names or {}; ctrl.debug_mode = false
         runtime.detectPetClassFromSpawn = env.detectPetClassFromSpawn -- reconcilePets calls it as a runtime method
         runtime.petEligibleForCls = env.petEligibleForCls
+        for k, f in pairs(namedFns) do runtime[k] = f end
         for i, c in ipairs(classes) do myClasses[i] = c end
     end
     local function addPet(id, name, opts)
@@ -11487,6 +11655,10 @@ do
     env.updatePetTracking = loadFunc(src, 'updatePetTracking', env)
     env.onPetSummonRefused = loadFunc(src, 'onPetSummonRefused', env)
     env.isPetMissingForClass = loadFunc(src, 'isPetMissingForClass', env)
+    for _, fnName in ipairs({ 'tuningDefs', 'tune', 'cleanPetName', 'manualPetName', 'findPetByName', 'setManualPetName', 'syncNamedPets' }) do
+        namedFns[fnName] = loadFunc(src, fnName, env)
+        runtime[fnName] = namedFns[fnName]
+    end
     local F = env
 
     -- A. Ownership
@@ -11647,7 +11819,123 @@ do
     assert_eq(F.isPetMissingForClass('Mag'), false, 'Suite 92: single pet class picks up its Me.Pet')
     assert_eq(F.isPetMissingForClass(nil), false, 'Suite 92: no class, a pet exists -> not missing')
 
+    -- K. Typed pet names: the class's pet is found by name, zone-wide, across resummons
+    resetWorld({ 'Nec', 'Mag', 'War' })
+    assert_eq(runtime.cleanPetName('  Xo"barb!  '), 'Xobarb', 'Suite 92: typed name: junk characters and padding are stripped')
+    assert_eq(runtime.cleanPetName(nil), '', 'Suite 92: typed name: nil -> empty')
+    assert_eq(runtime.cleanPetName(string.rep('a', 60)):len(), 40, 'Suite 92: typed name: capped at 40 characters')
+    assert_eq(runtime.manualPetName('Mag'), nil, 'Suite 92: typed name: none by default')
+    runtime.setManualPetName('Mag', '  Xobarb ')
+    assert_eq(ctrl.pet_names_manual.Mag, 'Xobarb', 'Suite 92: typed name: stored cleaned')
+    assert_eq(runtime.autoDirty, true, 'Suite 92: typed name: flags the loadout for autosave')
+
+    addPet(101, 'Xobarb', { race = 'Unknown', dist = 900 }) -- far outside the 150 radius sweep
+    runtime.syncNamedPets(true)
+    assert_eq(petState.myPets.Mag, 101, 'Suite 92: typed name: pet found zone-wide by name')
+    assert_eq(petState.namedStatus.Mag, 101, 'Suite 92: typed name: status reports the spawn id')
+    assert_eq(F.isPetMissingForClass('Mag'), false, 'Suite 92: typed name: found pet -> not missing')
+
+    world.spawns[101].dead = true -- pet dies; resummon gets a NEW id but the same name
+    addPet(150, 'Xobarb', { race = 'Unknown', dist = 900 })
+    runtime.syncNamedPets(true)
+    assert_eq(petState.myPets.Mag, 150, 'Suite 92: typed name: resummoned pet (new id) is picked up by name')
+
+    world.spawns[150].dead = true -- dead, nothing replaces it
+    runtime.syncNamedPets(true)
+    assert_eq(petState.myPets.Mag, nil, 'Suite 92: typed name: no living pet by that name -> slot cleared')
+    assert_eq(petState.namedStatus.Mag, false, 'Suite 92: typed name: status reports not found')
+    assert_eq(F.isPetMissingForClass('Mag'), true, 'Suite 92: typed name: missing -> will re-summon')
+
+    addPet(160, 'Xobarb', { race = 'Unknown', masterId = 42 }) -- another player's pet with the same name
+    runtime.syncNamedPets(true)
+    assert_eq(petState.myPets.Mag, nil, 'Suite 92: typed name: someone else\'s pet of that name is never ours')
+    addPet(170, 'xobarb', { race = 'Unknown' })
+    runtime.syncNamedPets(true)
+    assert_eq(petState.myPets.Mag, 170, 'Suite 92: typed name: match ignores case')
+
+    -- a name belongs to one class; clearing removes it
+    runtime.setManualPetName('Nec', 'XOBARB')
+    assert_eq(ctrl.pet_names_manual.Mag, nil, 'Suite 92: typed name: a duplicate name moves to the newest class')
+    assert_eq(ctrl.pet_names_manual.Nec, 'XOBARB', 'Suite 92: typed name: the newest class owns it')
+    runtime.setManualPetName('Nec', '')
+    assert_eq(runtime.manualPetName('Nec'), nil, 'Suite 92: typed name: empty clears it')
+
+    -- guessing never gives a typed-name class somebody else's pet
+    resetWorld({ 'Nec', 'Mag', 'War' })
+    runtime.setManualPetName('Mag', 'Xobarb')
+    addPet(100, 'Gebann', { race = 'Elemental' }) -- looks like a Mag pet by archetype
+    world.mePetId = 100
+    F.reconcilePets()
+    assert_eq(petState.myPets.Mag, nil, 'Suite 92: typed name: archetype guess never gives Mag a differently named pet')
+    assert_eq(F.petEligibleForCls(100, 'Mag', 100), false, 'Suite 92: typed name: even Me.Pet is not eligible unless the name matches')
+    assert_eq(petState.myPets.Nec, 100, 'Suite 92: typed name: the pet goes to the class without a typed name')
+
+    resetWorld({ 'Nec', 'Mag', 'War' })
+    runtime.setManualPetName('Nec', 'Gebann')
+    addPet(101, 'Xobarb', { race = 'Unknown' })
+    world.mePetId = 101
+    F.updatePetTracking()
+    assert_eq(petState.myPets.Nec, nil, 'Suite 92: typed name: Me.Pet fallback skips a class with a typed name')
+    assert_eq(petState.myPets.Mag, 101, 'Suite 92: typed name: Me.Pet fallback uses the next untyped pet class')
+
+    -- a summon for a typed class is resolved by name, not by the nearest new pet
+    resetWorld({ 'Nec', 'Mag', 'War' })
+    runtime.setManualPetName('Mag', 'Xobarb')
+    F.beginPetSummon('Mag', 'Elemental Servant')
+    addPet(103, 'Other', { masterId = 1, dist = 3 })
+    tick(); F.updatePetTracking()
+    assert_eq(petState.myPets.Mag, nil, 'Suite 92: typed name: a differently named new pet is not pinned to the summoning class')
+    assert_eq(petState.summonPending ~= nil, true, 'Suite 92: typed name: summon stays pending inside the grace window')
+    addPet(102, 'Xobarb', { masterId = 1, dist = 3 })
+    tick(); F.updatePetTracking()
+    assert_eq(petState.myPets.Mag, 102, 'Suite 92: typed name: the summoned pet is pinned by its name')
+    assert_eq(petState.summonPending, nil, 'Suite 92: typed name: summon resolved')
+    assert_eq(ctrl.pet_names.Mag, nil, 'Suite 92: typed name: a summon never overwrites it with a learned name')
+
+    -- summon refused: a typed-name pet is never handed to another class
+    resetWorld({ 'Nec', 'Mag', 'War' })
+    runtime.setManualPetName('Nec', 'Gebann')
+    addPet(100, 'Gebann', { race = 'Unknown' })
+    runtime.syncNamedPets(true)
+    F.beginPetSummon('Mag', 'Elemental Servant')
+    F.onPetSummonRefused()
+    assert_eq(petState.myPets.Nec, 100, 'Suite 92: typed name: refused summon does not take the typed-name pet')
+    assert_eq(petState.myPets.Mag, nil, 'Suite 92: typed name: and gives it to nobody')
+    runtime.setManualPetName('Mag', 'Xobarb')
+    F.beginPetSummon('Mag', 'Elemental Servant')
+    F.onPetSummonRefused()
+    assert_eq(petState.myPets.Mag, nil, 'Suite 92: typed name: refused summon for a typed class reassigns nothing')
+    assert_eq((petState.summonBlockedUntil.Mag or 0) > world.clock, true, 'Suite 92: typed name: refused summon still backs off')
+
+    -- L. Tunables: pet search radius, summon grace, refused-summon backoff
+    resetWorld({ 'Nec', 'Mag', 'War' })
+    addPet(100, 'Gebann', { dist = 200 }) -- beyond the default 150-unit sweep
+    petState.petsCache = nil
+    assert_eq(#F.getAllMyPets(), 0, 'Suite 92: tunable: default pet search radius (150) does not see a pet 200 away')
+    ctrl.pet_scan_radius = 300
+    petState.petsCache = nil
+    assert_eq(#F.getAllMyPets(), 1, 'Suite 92: tunable: a larger Pet Search Radius finds it')
+
+    resetWorld({ 'Nec', 'Mag', 'War' })
+    F.beginPetSummon('Mag', 'Elemental Servant')
+    assert_eq(petState.summonPending.untilAt, world.clock + 12, 'Suite 92: tunable: default summon grace is 12 s')
+    ctrl.pet_summon_grace_sec = 30
+    F.beginPetSummon('Mag', 'Elemental Servant')
+    assert_eq(petState.summonPending.untilAt, world.clock + 30, 'Suite 92: tunable: Summon Grace setting is used')
+
+    resetWorld({ 'Nec', 'Mag', 'War' })
+    F.beginPetSummon('Mag', 'Elemental Servant')
+    F.onPetSummonRefused()
+    assert_eq(petState.summonBlockedUntil.Mag, world.clock + 60, 'Suite 92: tunable: default refused-summon backoff is 60 s')
+    ctrl.pet_summon_refused_backoff_sec = 120
+    F.beginPetSummon('Mag', 'Elemental Servant')
+    F.onPetSummonRefused()
+    assert_eq(petState.summonBlockedUntil.Mag, world.clock + 120, 'Suite 92: tunable: Refused-Summon Backoff setting is used')
+
     -- J. Source wiring
+    assert_true(src:find("function UI%.drawPetNames%(%)") ~= nil and src:find("\n            UI%.drawPetNames%(%)\n") ~= nil,
+        'Suite 92: Pet Names UI exists and is drawn in Pet Management')
+    assert_true(src:find("pet_names_manual         = {}", 1, true) ~= nil, 'Suite 92: pet_names_manual is a ctrl default')
     assert_true(src:find("return isPetMissingForClass%(cls%)") ~= nil, 'Suite 92: missing pet condition delegates to isPetMissingForClass')
     assert_true(src:find("beginPetSummon%(g%.cls, g%.spell%)") ~= nil, 'Suite 92: pet gem cast starts summon tracking')
     assert_true(src:find("\n    updatePetTracking%(%)\n") ~= nil, 'Suite 92: main loop calls updatePetTracking')
@@ -14880,7 +15168,7 @@ end)()
 ;(function()
     print('--- Suite 101: UI scale ---')
     do
-        local tsrc = readFile('TAC/lua/triune.lua')
+        local tsrc = readFile('TAC/lua/triune/init.lua')
         local fn = tsrc:match('function runtime%.restartScript%(%)(.-)\nend')
         assert_true(fn ~= nil, 'Suite 101: runtime.restartScript exists')
         local runAt, stopAt = fn:find("mq.cmd('/timed 15 /lua run ", 1, true), fn:find("mq.cmd('/lua stop ", 1, true)
@@ -17244,7 +17532,7 @@ end)()
     os.execute('rm -rf "' .. root .. '"')
 
     -- 7. core wiring and the chat hook
-    local src = readFile('TAC/lua/triune.lua')
+    local src = readFile('TAC/lua/triune/init.lua')
     assert_true(src:find('        show_gamedb              = false,', 1, true) ~= nil, 'Suite 103: defaultCtrl seeds show_gamedb')
     assert_true(src:find('if c.show_gamedb == nil then c.show_gamedb = false end', 1, true) ~= nil, 'Suite 103: sanitize seeds show_gamedb')
     assert_true(src:find("'gamedb.lua',", 1, true) ~= nil, 'Suite 103: discover() known-plugin probe lists gamedb.lua')
@@ -19016,7 +19304,7 @@ do
 
     -- 5. Core wiring
     do
-        local t = readFile('TAC/lua/triune.lua')
+        local t = readFile('TAC/lua/triune/init.lua')
         assert_true(t:find("'nmsloot.lua',", 1, true) ~= nil, 'Suite 109: discover() known-plugin probe lists nmsloot.lua')
         assert_true(t:find('if c.show_nmsloot == nil then c.show_nmsloot = false end', 1, true) ~= nil, 'Suite 109: sanitize seeds show_nmsloot')
         local psrc = readFile('TAC/lua/tac/nmsloot.lua')
@@ -19622,6 +19910,8 @@ do
         env.runtime = rt
         rt.playerHasAggro = function(id) return w.aggro[id] == true end
         rt.ANCHOR_ROAM = loadstring('return ' .. src:match('runtime%.ANCHOR_ROAM = (%b{})'))()
+        rt.tuningDefs = loadFunc(src, 'tuningDefs', env) -- roam pause / leg limit / arrival distance are tunables
+        rt.tune = loadFunc(src, 'tune', env)
         rt.saveLoadout = function() w.saves = (w.saves or 0) + 1 end
         rt.huntAnchor = loadFunc(src, 'huntAnchor', env)
         rt.anchorAggroException = loadFunc(src, 'anchorAggroException', env)
@@ -19723,20 +20013,20 @@ do
     W.now = W.now + 1
     assert_eq(W.rt.anchorRoamTick(), false, 'Suite 112: within 10 units (2D) the leg is over')
     assert_nil(W.pursuit.wanderLoc, 'Suite 112: leg cleared on arrival')
-    assert_eq(W.rt.anchorRoamNextAt, W.now + W.rt.ANCHOR_ROAM.PAUSE_SECS, 'Suite 112: a pause follows each arrival')
+    assert_eq(W.rt.anchorRoamNextAt, W.now + W.rt.tune("roam_pause_sec"), 'Suite 112: a pause follows each arrival')
     assert_eq(W.rt.anchorRoamTick(), false, 'Suite 112: no new leg during the pause')
-    W.now = W.now + W.rt.ANCHOR_ROAM.PAUSE_SECS + 0.1
+    W.now = W.now + W.rt.tune("roam_pause_sec") + 0.1
     W.navActive = false
     assert_eq(W.rt.anchorRoamTick(), true, 'Suite 112: after the pause the next leg starts')
     W.now = W.now + 3
     assert_eq(W.rt.anchorRoamTick(), false, 'Suite 112: nav finishing short of the point (a Z guess) still ends the leg')
     assert_true(W.stops >= 1, 'Suite 112: ... with the walk stopped')
-    W.now = W.now + W.rt.ANCHOR_ROAM.PAUSE_SECS + 0.1
+    W.now = W.now + W.rt.tune("roam_pause_sec") + 0.1
     W.paths = function() return false end
     assert_eq(W.rt.anchorRoamTick(), false, 'Suite 112: no pathable point this round -> no leg')
     assert_nil(W.pursuit.wanderLoc, 'Suite 112: ... nothing set')
     W.paths = nil
-    W.now = W.now + W.rt.ANCHOR_ROAM.PAUSE_SECS + 0.1
+    W.now = W.now + W.rt.tune("roam_pause_sec") + 0.1
     W.sitting = true
     assert_eq(W.rt.anchorRoamTick(), false, 'Suite 112: a sitting character is not walked off')
     W.sitting = false
@@ -20145,7 +20435,7 @@ do
 
     -- 5. Core wiring
     do
-        local t = readFile('TAC/lua/triune.lua')
+        local t = readFile('TAC/lua/triune/init.lua')
         assert_true(t:find("'gm_commands.lua',", 1, true) ~= nil, 'Suite 113: discover() known-plugin probe lists gm_commands.lua')
         assert_true(t:find('if c.show_gm_commands == nil then c.show_gm_commands = false end', 1, true) ~= nil, 'Suite 113: sanitize seeds show_gm_commands')
         assert_true(t:find('show_gm_commands         = false,', 1, true) ~= nil, 'Suite 113: default loadout has show_gm_commands')

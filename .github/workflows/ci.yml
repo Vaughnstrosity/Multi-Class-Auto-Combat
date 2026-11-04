@@ -60,7 +60,7 @@ jobs:
       - name: Extract versions
         id: ver
         run: |
-          MAIN=$(grep -oP "^local VERSION\s+= '\K[^']+" TAC/lua/triune.lua)
+          MAIN=$(grep -oP "^local VERSION\s+= '\K[^']+" TAC/lua/triune/init.lua)
           README=$(grep -oP "Current version: \*\*\K[^*]+" README.md)
           echo "main=$MAIN"    >> "$GITHUB_OUTPUT"
           echo "readme=$README"   >> "$GITHUB_OUTPUT"

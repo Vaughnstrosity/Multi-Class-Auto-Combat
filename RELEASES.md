@@ -4,6 +4,20 @@ Short, human-readable notes for each release. The GitHub release page is built
 from the entry that matches the tag (`v3.0` -> `## 3.0`). The full, detailed
 history of every change stays in [CHANGELOG.md](CHANGELOG.md).
 
+## 3.5
+
+Configurable class count, typed pet names, Advanced Tuning settings and a new
+script folder. **Delete the old `lua/triune.lua` when updating**; the script is now
+`lua/triune/init.lua` (`/lua run triune` is unchanged).
+
+- **1-16 classes:** set the number of classes under Settings -> General Settings ->
+  Character Classes & Loadout; class slots and per-class lists follow it.
+- **Pet names:** type each pet class's pet name (Settings -> Pet Management -> Pet
+  Names) and pets are found by name, so they are never mixed up between classes.
+- **Advanced Tuning:** pet radii and timers, pull distances, the unreachable-mob
+  blacklist, idle roaming and group-rez attempts are now sliders. Defaults match the
+  old values. Radius and chase-range sliders go up to 10000.
+
 ## 3.4
 
 Target recovery, optional group resurrection and core hooks for the Long-Duration

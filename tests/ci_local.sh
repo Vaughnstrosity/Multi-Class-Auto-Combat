@@ -24,9 +24,9 @@ rm -f "$errlog"
 [ "$fail" = 0 ] && echo "all files compile"
 
 step "2/5 Version consistency"
-MAIN=$(grep -oP "^local VERSION\s+= '\K[^']+" TAC/lua/triune.lua)
+MAIN=$(grep -oP "^local VERSION\s+= '\K[^']+" TAC/lua/triune/init.lua)
 README=$(grep -oP "Current version: \*\*\K[^*]+" README.md)
-[ -n "$MAIN" ] || bad "could not read local VERSION from TAC/lua/triune.lua"
+[ -n "$MAIN" ] || bad "could not read local VERSION from TAC/lua/triune/init.lua"
 [ -n "$README" ] || bad "could not read 'Current version' from README.md"
 if [ "$MAIN" != "$README" ]; then bad "triune.lua=$MAIN README.md=$README"; else echo "in sync: $MAIN"; fi
 

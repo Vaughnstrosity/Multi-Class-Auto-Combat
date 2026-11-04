@@ -907,7 +907,7 @@ local function drawWindow()
     end
     core.postBeginWindow('spellbook')
 
-    ImGui.TextColored(0.4, 0.8, 1.0, 1.0, "ACTIVE GESTALT TRIO:")
+    ImGui.TextColored(0.4, 0.8, 1.0, 1.0, "ACTIVE CLASSES:")
     ImGui.SameLine()
 
     local tabs = state.casterClasses
@@ -931,7 +931,8 @@ local function drawWindow()
         end
         ImGui.PopStyleColor()
 
-        ImGui.SameLine()
+        -- Wrap after every 6 class tabs so up to 16 classes stay on screen.
+        if i % 6 ~= 0 then ImGui.SameLine() end
     end
 
     if ImGui.SmallButton("Re-detect##Classes") then
