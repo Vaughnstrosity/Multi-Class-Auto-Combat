@@ -19,19 +19,19 @@ while IFS= read -r f; do
     if ! luajit -bl "$f" > /dev/null 2>"$errlog"; then bad "$f (luajit)"; cat "$errlog"
     elif ! "$LUAC" -p "$f" > /dev/null 2>"$errlog"; then bad "$f (luac: >200 locals or syntax)"; cat "$errlog"
     fi
-done < <(find TAC -name '*.lua' -type f)
+done < <(find MCAC -name '*.lua' -type f)
 rm -f "$errlog"
 [ "$fail" = 0 ] && echo "all files compile"
 
 step "2/5 Version consistency"
-MAIN=$(grep -oP "^local VERSION\s+= '\K[^']+" TAC/lua/triune/init.lua)
+MAIN=$(grep -oP "^local VERSION\s+= '\K[^']+" MCAC/lua/mcac/init.lua)
 README=$(grep -oP "Current version: \*\*\K[^*]+" README.md)
-[ -n "$MAIN" ] || bad "could not read local VERSION from TAC/lua/triune/init.lua"
+[ -n "$MAIN" ] || bad "could not read local VERSION from MCAC/lua/mcac/init.lua"
 [ -n "$README" ] || bad "could not read 'Current version' from README.md"
-if [ "$MAIN" != "$README" ]; then bad "triune.lua=$MAIN README.md=$README"; else echo "in sync: $MAIN"; fi
+if [ "$MAIN" != "$README" ]; then bad "mcac.lua=$MAIN README.md=$README"; else echo "in sync: $MAIN"; fi
 
 step "3/5 Luacheck"
-luacheck TAC/ -q || bad "luacheck warnings (CI fails on any warning)"
+luacheck MCAC/ -q || bad "luacheck warnings (CI fails on any warning)"
 
 step "4/5 Unit tests"
 luajit tests/test_pure_logic.lua | tail -n 8

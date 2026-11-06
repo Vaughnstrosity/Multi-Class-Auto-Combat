@@ -4,11 +4,17 @@ Short, human-readable notes for each release. The GitHub release page is built
 from the entry that matches the tag (`v3.0` -> `## 3.0`). The full, detailed
 history of every change stays in [CHANGELOG.md](CHANGELOG.md).
 
+## 3.51
+
+Renamed to **MCAC (Multi Class Auto Combat)**. The script is now `lua/mcac/init.lua`
+(`/lua run mcac`), plugins sit beside it in `lua/mcac/`, and saved `config/triune_*` files are
+copied to `config/mcac_*` on first start. **Delete the old `lua/triune.lua`, `lua/triune/` and
+`lua/tac/` when updating.** The update checker now follows the Multi-Class-Auto-Combat repository.
+
 ## 3.5
 
-Configurable class count, typed pet names, Advanced Tuning settings and a new
-script folder. **Delete the old `lua/triune.lua` when updating**; the script is now
-`lua/triune/init.lua` (`/lua run triune` is unchanged).
+Configurable class count, typed pet names and Advanced Tuning settings. The core script moved to
+its own folder (`lua/triune/init.lua`).
 
 - **1-16 classes:** set the number of classes under Settings -> General Settings ->
   Character Classes & Loadout; class slots and per-class lists follow it.

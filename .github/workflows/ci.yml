@@ -46,7 +46,7 @@ jobs:
             else
               echo "OK: $f"
             fi
-          done < <(find TAC -name '*.lua' -type f)
+          done < <(find MCAC -name '*.lua' -type f)
           exit $fail
 
   version-sync:
@@ -60,16 +60,16 @@ jobs:
       - name: Extract versions
         id: ver
         run: |
-          MAIN=$(grep -oP "^local VERSION\s+= '\K[^']+" TAC/lua/triune/init.lua)
+          MAIN=$(grep -oP "^local VERSION\s+= '\K[^']+" MCAC/lua/mcac/init.lua)
           README=$(grep -oP "Current version: \*\*\K[^*]+" README.md)
           echo "main=$MAIN"    >> "$GITHUB_OUTPUT"
           echo "readme=$README"   >> "$GITHUB_OUTPUT"
-          echo "triune.lua=$MAIN | README.md=$README"
+          echo "mcac.lua=$MAIN | README.md=$README"
 
       - name: Fail on version drift
         run: |
           if [ "${{ steps.ver.outputs.main }}" != "${{ steps.ver.outputs.readme }}" ]; then
-            echo "::error::Version mismatch — triune.lua (${{ steps.ver.outputs.main }}) and README.md (${{ steps.ver.outputs.readme }}) must carry the same version."
+            echo "::error::Version mismatch — mcac.lua (${{ steps.ver.outputs.main }}) and README.md (${{ steps.ver.outputs.readme }}) must carry the same version."
             exit 1
           fi
           echo "All versions in sync: ${{ steps.ver.outputs.main }}"
@@ -88,7 +88,7 @@ jobs:
           sudo luarocks install luacheck
 
       - name: Run Luacheck
-        run: luacheck TAC/
+        run: luacheck MCAC/
 
   unit-tests:
     name: Pure-logic unit tests

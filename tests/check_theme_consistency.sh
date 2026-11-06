@@ -4,10 +4,10 @@
 #
 # Every companion tool used to be a standalone script carrying its own copy
 # of pushTheme()/popTheme(), and this script diffed those copies against a
-# canonical one. All of them are in-process plugins now (TAC/lua/tac/*.lua)
+# canonical one. All of them are in-process plugins now (MCAC/lua/mcac/*.lua)
 # and draw through core.pushTheme()/core.popTheme(), so the check is simply:
 #
-#   1. triune.lua still defines UI.pushTheme / UI.popTheme (the one theme).
+#   1. mcac.lua still defines UI.pushTheme / UI.popTheme (the one theme).
 #   2. No plugin defines its own pushTheme/popTheme or pushes the theme
 #      colour tuples itself (drift would be invisible until it looked wrong).
 #   3. Every plugin that opens a (non-overlay) window uses core.pushTheme().
@@ -18,14 +18,14 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-LUA_DIR="$REPO_ROOT/TAC/lua"
-PLUGIN_DIR="$LUA_DIR/tac"
-CORE="$LUA_DIR/triune/init.lua"
+LUA_DIR="$REPO_ROOT/MCAC/lua"
+PLUGIN_DIR="$LUA_DIR/mcac"
+CORE="$LUA_DIR/mcac/init.lua"
 
 fail=0
 
 if ! grep -q '^function UI.pushTheme()' "$CORE" || ! grep -q '^function UI.popTheme()' "$CORE"; then
-    echo "::error file=$CORE::triune.lua must define UI.pushTheme() and UI.popTheme()"
+    echo "::error file=$CORE::mcac.lua must define UI.pushTheme() and UI.popTheme()"
     exit 1
 fi
 echo "Canonical theme source: $(basename "$CORE") (UI.pushTheme / UI.popTheme)"
@@ -39,6 +39,8 @@ echo ""
 shopt -s nullglob
 for plugin in "$PLUGIN_DIR"/*.lua; do
     name="$(basename "$plugin")"
+    # init.lua is the core itself (it owns the theme), not a plugin
+    [ "$name" = "init.lua" ] && continue
 
     if grep -qE '^\s*local function (pushTheme|popTheme|pushCol|pushVar)\s*\(' "$plugin"; then
         echo "::error file=$plugin::$name defines its own theme helpers; use core.pushTheme()/core.popTheme()"

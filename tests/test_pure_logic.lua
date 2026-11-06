@@ -1,7 +1,7 @@
 #!/usr/bin/env luajit
 ---@diagnostic disable: deprecated, duplicate-set-field, unused-local, redefined-local, need-check-nil, redundant-parameter, undefined-field, param-type-mismatch
 -- ==========================================================================
--- tests/test_pure_logic.lua — Unit tests for pure-logic functions in triune.lua
+-- tests/test_pure_logic.lua — Unit tests for pure-logic functions in mcac.lua
 --
 -- Runs under plain LuaJIT (no MacroQuest required).  Extracts function bodies
 -- from the source file by matching `local function NAME(` and counting
@@ -80,13 +80,13 @@ end
 -- ---------------------------------------------------------------------------
 -- Reads the source file, finds `local function <name>(` at column 1 (no
 -- leading whitespace), and captures lines until the matching `end` at column 1.
--- For top-level functions in triune.lua, the closing `end` is always un-indented.
+-- For top-level functions in mcac.lua, the closing `end` is always un-indented.
 
 -- The real logger module: initPluginManager and friends reference it as an
 -- upvalue (`tlog`), so every sandbox gets it. Its file output stays off
 -- (no getFileEnabled getter), so tests only touch the in-memory ring.
-package.path = 'TAC/lua/?.lua;' .. package.path
-local tlog = require('tac.triune_log')
+package.path = 'MCAC/lua/?.lua;' .. package.path
+local tlog = require('mcac.mcac_log')
 
 local function readFile(path)
     local f = assert(io.open(path, 'r'), 'Cannot open: ' .. path)
@@ -169,10 +169,10 @@ end
 -- ---------------------------------------------------------------------------
 -- Source file path (relative to repo root)
 -- ---------------------------------------------------------------------------
-local srcPath = 'TAC/lua/triune/init.lua'
+local srcPath = 'MCAC/lua/mcac/init.lua'
 local src = readFile(srcPath)
 -- Auto AA engine source (migrated to the auto_aa plugin); global to stay under the 200-local cap
-AA_CONTENT = readFile('TAC/lua/tac/auto_aa.lua')
+AA_CONTENT = readFile('MCAC/lua/mcac/auto_aa.lua')
 
 -- ---------------------------------------------------------------------------
 -- Shared constants (duplicated here to match module-level definitions)
@@ -245,13 +245,13 @@ local MQSHORT = {
     BERSERKERS = 'Ber',
 }
 
--- Waypoint export/import string constants (must match triune.lua's module-level definitions)
+-- Waypoint export/import string constants (must match mcac.lua's module-level definitions)
 local WP = {
     B64_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/',
     B64_LOOKUP = {},
     RS = string.char(30),
     US = string.char(31),
-    EXPORT_PREFIX = 'TACWP1:',
+    EXPORT_PREFIX = 'MCACWP1:',
     EXPORT_VERSION = 1,
 }
 for i = 1, #WP.B64_CHARS do WP.B64_LOOKUP[WP.B64_CHARS:sub(i, i)] = i - 1 end
@@ -805,15 +805,15 @@ do
     -- no slot loop may stay hard-coded to three classes
     assert_true(src:find('for i = 1, 3 do\n        local cls = myClasses%[i%]', 1) == nil
         and src:find('for i = 1, 3 do\n            local cls = myClasses%[i%]', 1) == nil,
-        'triune.lua: no class-slot loop is hard-coded to 3')
-    assert_eq(select(2, src:gsub('runtime%.CLASS_PALETTE = {', '')), 1, 'triune.lua: one class palette')
+        'mcac.lua: no class-slot loop is hard-coded to 3')
+    assert_eq(select(2, src:gsub('runtime%.CLASS_PALETTE = {', '')), 1, 'mcac.lua: one class palette')
 
     -- Puller radius sliders go up to 10000 (was 2000), from one constant
-    assert_true(src:find('runtime.MAX_SEARCH_RADIUS = 10000', 1, true) ~= nil, 'triune.lua: MAX_SEARCH_RADIUS is 10000')
+    assert_true(src:find('runtime.MAX_SEARCH_RADIUS = 10000', 1, true) ~= nil, 'mcac.lua: MAX_SEARCH_RADIUS is 10000')
     assert_true(src:find("ImGui.SliderInt('Search Radius', ctrl.hunter_radius or 1500, 50, runtime.MAX_SEARCH_RADIUS)", 1, true) ~= nil,
-        'triune.lua: Search Radius slider uses MAX_SEARCH_RADIUS')
+        'mcac.lua: Search Radius slider uses MAX_SEARCH_RADIUS')
     assert_true(src:find("curRadius, 1, runtime.MAX_SEARCH_RADIUS)", 1, true) ~= nil,
-        'triune.lua: Combat Radius slider uses MAX_SEARCH_RADIUS (it caps Search Radius)')
+        'mcac.lua: Combat Radius slider uses MAX_SEARCH_RADIUS (it caps Search Radius)')
 end
 
 -- ============================================================================
@@ -865,10 +865,10 @@ do
     for _, literal in ipairs({ "'pet radius 150'", "'pet radius 100'", 'PET_SUMMON_GRACE_SEC', 'deadAllyCorpseId(2500)',
                                'attempts.count >= 3', 'navAttempts >= 3', 'C.PAUSE_SECS', 'C.LEG_MAX_SECS', 'C.ARRIVE_DIST',
                                "ctrl.camp_radius or 100, 10, 500)", 'ctrl.xtar_nav_dist or 150, 25, 300)' }) do
-        assert_true(src:find(literal, 1, true) == nil, 'triune.lua: hard-coded ' .. literal .. ' is gone')
+        assert_true(src:find(literal, 1, true) == nil, 'mcac.lua: hard-coded ' .. literal .. ' is gone')
     end
     assert_true(src:find("function UI.drawAdvancedTuning()", 1, true) ~= nil
-        and src:find("\n    UI.drawAdvancedTuning()\n", 1, true) ~= nil, 'triune.lua: Advanced Tuning section exists and is drawn')
+        and src:find("\n    UI.drawAdvancedTuning()\n", 1, true) ~= nil, 'mcac.lua: Advanced Tuning section exists and is drawn')
 end
 
 -- ============================================================================
@@ -1094,14 +1094,14 @@ assert_eq(normalizeCommandKey(nil), '', 'cmdKey: nil')
 assert_eq(normalizeCommandKey(''), '', 'cmdKey: empty')
 
 -- ============================================================================
--- 14. setTriuneMode(arg1, arg2) — partial test (mode/submode resolution only)
+-- 14. setMcacMode(arg1, arg2) — partial test (mode/submode resolution only)
 --     We can't fully test this because it calls setManualHunterPetHold,
 --     but we can test the normalizeCommandKey→mode mapping by checking
 --     just the parsing portion.
 -- ============================================================================
-print('--- setTriuneMode (mode parsing) ---')
+print('--- setMcacMode (mode parsing) ---')
 -- We test via normalizeCommandKey + the known dispatch table documented in the function
--- since setTriuneMode has side effects we can't call outside MQ.
+-- since setMcacMode has side effects we can't call outside MQ.
 -- Instead, verify the command key mappings are self-consistent:
 local MODE_MAP = {
     manual = { 'Manual', 'Hunt' },
@@ -1122,7 +1122,7 @@ local MODE_MAP = {
 }
 for input, expected in pairs(MODE_MAP) do
     local key = normalizeCommandKey(input)
-    assert_eq(key, input, 'setTriuneMode key: ' .. input .. ' normalizes to itself')
+    assert_eq(key, input, 'setMcacMode key: ' .. input .. ' normalizes to itself')
 end
 
 -- ============================================================================
@@ -1187,7 +1187,7 @@ assert_eq(serializeToString(nil), 'nil', 'serialize: nil')
 -- 18. extractConName (runtime method) — parsing /consider chat lines
 -- ============================================================================
 print('--- extractConName ---')
--- The real runtime.extractConName from triune.lua.
+-- The real runtime.extractConName from mcac.lua.
 local extractConName = loadFunc(src, 'extractConName')
 
 assert_eq(extractConName('a fire beetle scowls at you'), 'a fire beetle', 'con: scowls')
@@ -1203,8 +1203,8 @@ assert_nil(extractConName(''), 'con: empty')
 -- ============================================================================
 print('--- isDetrimentalSpell & createCastTracker ---')
 
-local triuneSrc = readFile('TAC/lua/triune/init.lua')
-local isDetrimentalSpell = loadstring(extractFunction(triuneSrc, 'isDetrimentalSpell') .. '\nreturn isDetrimentalSpell')()
+local mcacSrc = readFile('MCAC/lua/mcac/init.lua')
+local isDetrimentalSpell = loadstring(extractFunction(mcacSrc, 'isDetrimentalSpell') .. '\nreturn isDetrimentalSpell')()
 
 -- A. isDetrimentalSpell classification tests
 assert_eq(isDetrimentalSpell('Heal'), false, 'det: Heal is beneficial')
@@ -1265,9 +1265,9 @@ assert_eq(evalXtOk(0, 3, false), false, 'min_xtar: OOC beneficial spell with exp
 assert_eq(evalXtOk(3, 3, false), true, 'min_xtar: Combat beneficial spell with explicit min_xtar=3 allowed on 3 mobs')
 
 local function testCastTracker()
-    -- The real createCastTracker from triune.lua, with os.clock() under test
+    -- The real createCastTracker from mcac.lua, with os.clock() under test
     -- control (clk.now) and a spawn TLO whose names never change.
-    local body = triuneSrc:match("local function createCastTracker%(%).-\nend\n")
+    local body = mcacSrc:match("local function createCastTracker%(%).-\nend\n")
     assert_true(body ~= nil, 'tracker: createCastTracker body extracted')
     local clk = { now = 100 }
     local env = setmetatable({
@@ -1377,9 +1377,9 @@ end
 testCastTracker()
 
 -- ============================================================================
--- CROSS-MODULE TESTS: tac/dps.lua (DPS parser plugin)
+-- CROSS-MODULE TESTS: mcac/dps.lua (DPS parser plugin)
 -- ============================================================================
-local dpsSrc = readFile('TAC/lua/tac/dps.lua')
+local dpsSrc = readFile('MCAC/lua/mcac/dps.lua')
 
 -- ============================================================================
 -- 20. cleanLine (DPS) — strip MQ color codes
@@ -1547,9 +1547,9 @@ assert_eq(getFightDPS(100, 3), 33, 'dps: 100/3 rounds to 33')
 assert_eq(getFightDPS(200, 3), 67, 'dps: 200/3 rounds to 67')
 
 -- ============================================================================
--- CROSS-MODULE TESTS: tac/buffbot.lua (buffbot plugin)
+-- CROSS-MODULE TESTS: mcac/buffbot.lua (buffbot plugin)
 -- ============================================================================
-local bbSrc = readFile('TAC/lua/tac/buffbot.lua')
+local bbSrc = readFile('MCAC/lua/mcac/buffbot.lua')
 
 -- ============================================================================
 -- 26. parseBuffRequest (buffbot) — tell message parsing
@@ -1834,10 +1834,10 @@ do
 end
 
 -- ============================================================================
--- 30. triune_data.lua — structural validation
+-- 30. mcac_data.lua — structural validation
 -- ============================================================================
-print('--- triune_data.lua validation ---')
-local dataFile = assert(loadfile('TAC/config/triune_data.lua'))
+print('--- mcac_data.lua validation ---')
+local dataFile = assert(loadfile('MCAC/config/mcac_data.lua'))
 assert_neq(dataFile, nil, 'data: loadfile succeeds')
 
 local dataOk, DATA_LOADED = pcall(dataFile)
@@ -2912,7 +2912,7 @@ do
     assert_eq(testStickLoaded3(), false, 'stickLoaded: false when neither Stick TLO nor Plugin is loaded')
 
     -- 4. Cross-file validation for the map plugin
-    local srcMap = readFile('TAC/lua/tac/map.lua')
+    local srcMap = readFile('MCAC/lua/mcac/map.lua')
     local testMapStick = loadFunc(srcMap, 'stickLoaded', {
         mq = dummyMqMoveUtilsPluginLoaded,
         pcall = pcall,
@@ -3004,9 +3004,9 @@ do
 end
 
 -- ============================================================================
--- Suite 40: triune_map map parsing & folder discovery logic
+-- Suite 40: mcac_map map parsing & folder discovery logic
 -- ============================================================================
-print('--- triune_map parser & folder logic ---')
+print('--- mcac_map parser & folder logic ---')
 
 do
     local lineStr = 'L 100.5, -200.5, 10.0, 120.0, -250.0, 12.5, 255, 128, 64'
@@ -3127,7 +3127,7 @@ do
 end
 
 do
-    -- Triune Loadout & Waypoint Unpacking Logic
+    -- MCAC Loadout & Waypoint Unpacking Logic
     local dummyLoadout = {
         ["TestChar"] = {
             control = {
@@ -3161,22 +3161,22 @@ do
     }
 
     local charCtrl = dummyLoadout["TestChar"].control
-    assert_eq(charCtrl.camp_radius, 65, 'triune loadout sync: camp_radius')
-    assert_eq(charCtrl.combat_radius, 120, 'triune loadout sync: combat_radius')
-    assert_eq(#charCtrl.waypoints, 2, 'triune loadout sync: character waypoint count')
-    assert_eq(charCtrl.waypoints[2].name, "Bridge Post", 'triune loadout sync: waypoint 2 name')
+    assert_eq(charCtrl.camp_radius, 65, 'mcac loadout sync: camp_radius')
+    assert_eq(charCtrl.combat_radius, 120, 'mcac loadout sync: combat_radius')
+    assert_eq(#charCtrl.waypoints, 2, 'mcac loadout sync: character waypoint count')
+    assert_eq(charCtrl.waypoints[2].name, "Bridge Post", 'mcac loadout sync: waypoint 2 name')
 
     local zoneWps = dummyLoadout.__zoneWaypoints["poknowledge"]
-    assert_eq(#zoneWps.waypoints, 1, 'triune loadout sync: zone waypoint count')
-    assert_true(zoneWps.waypoint_loop, 'triune loadout sync: zone waypoint loop')
+    assert_eq(#zoneWps.waypoints, 1, 'mcac loadout sync: zone waypoint count')
+    assert_true(zoneWps.waypoint_loop, 'mcac loadout sync: zone waypoint loop')
 
     local zoneHazards = dummyLoadout.__zoneHazards["poknowledge"]
-    assert_eq(#zoneHazards, 1, 'triune loadout sync: zone hazards count')
-    assert_eq(zoneHazards[1].hits, 4, 'triune loadout sync: hazard hit count')
+    assert_eq(#zoneHazards, 1, 'mcac loadout sync: zone hazards count')
+    assert_eq(zoneHazards[1].hits, 4, 'mcac loadout sync: hazard hit count')
 end
 
 do
-    -- Triune Map Settings & Zoom Persistence Roundtrip
+    -- MCAC Map Settings & Zoom Persistence Roundtrip
     local function serializeVal(val, indent)
         indent = indent or 1
         local indStr = string.rep('  ', indent)
@@ -3236,13 +3236,13 @@ end
 -- ============================================================================
 
 -- ============================================================================
--- Suite 42: triune_map Smart Auto-Z & Depth Fading
+-- Suite 42: mcac_map Smart Auto-Z & Depth Fading
 -- ============================================================================
-print('--- triune_map Smart Auto-Z & Depth Fading ---')
+print('--- mcac_map Smart Auto-Z & Depth Fading ---')
 do
-    -- The real getZAlphaMultiplier from tac/map.lua (explicit mode/fading
+    -- The real getZAlphaMultiplier from mcac/map.lua (explicit mode/fading
     -- arguments; cfg is only the fallback when they are nil).
-    local getZAlphaMultiplier = loadFunc(readFile('TAC/lua/tac/map.lua'), 'getZAlphaMultiplier', { cfg = { zFilterMode = 1, zDepthFading = false } })
+    local getZAlphaMultiplier = loadFunc(readFile('MCAC/lua/mcac/map.lua'), 'getZAlphaMultiplier', { cfg = { zFilterMode = 1, zDepthFading = false } })
 
     -- Test exact center of floor: 100% opacity
     local a1, vis1 = getZAlphaMultiplier(50, 40, 65, 1, true)
@@ -3280,12 +3280,12 @@ do
 end
 
 -- ============================================================================
--- Suite 43: triune_map Norrath Zone Atlas & Navigation Logic
+-- Suite 43: mcac_map Norrath Zone Atlas & Navigation Logic
 -- ============================================================================
-print('--- triune_map Norrath Zone Atlas & Navigation Logic ---')
+print('--- mcac_map Norrath Zone Atlas & Navigation Logic ---')
 do
-    local mapSrc = readFile('TAC/lua/tac/map.lua')
-    assert_true(mapSrc ~= nil and #mapSrc > 0, 'tac/map.lua read successfully')
+    local mapSrc = readFile('MCAC/lua/mcac/map.lua')
+    assert_true(mapSrc ~= nil and #mapSrc > 0, 'mcac/map.lua read successfully')
 
     -- Verify version is 1.1
     local versionMatch = mapSrc:match("local VERSION%s*=%s*'([^']+)'")
@@ -3412,7 +3412,7 @@ do
         { short = 'hohonora',     name = 'Halls of Honor',            era = 'Planes of Power',  type = 'Dungeon', connections = {'povalor'} },
     }
 
-    -- The real findZoneRoute / rebuildAtlasGraph from tac/map.lua over a
+    -- The real findZoneRoute / rebuildAtlasGraph from mcac/map.lua over a
     -- sandboxed atlas registry (state.atlasAllZones = routeZones).
     local testFindZoneRoute = (function()
         local routeState = { atlasAllZones = routeZones, atlasRouteCache = {} }
@@ -3477,9 +3477,9 @@ do
 end
 
 -- ============================================================================
--- Suite 44: triune_map high-performance caching & AABB culling
+-- Suite 44: mcac_map high-performance caching & AABB culling
 -- ============================================================================
-print('--- triune_map caching & AABB culling logic ---')
+print('--- mcac_map caching & AABB culling logic ---')
 do
     -- 1. Zone Map Cache Roundtrip
     local testCache = {}
@@ -3656,11 +3656,11 @@ do
     assert_true(not canCastOnNpc(tracker, 1001, 'Slow', 2), '2 casts max reached for Slow')
     assert_true(canCastOnNpc(tracker, 1002, 'Tashani', 1), 'new mob allows cast')
 
-    -- Source verification for triune.lua
-    local triuneContent = readFile('TAC/lua/triune/init.lua')
-    assert_true(triuneContent:find("ImGui.Combo%('##mc'") ~= nil, 'triune.lua uses ##mc combo for max_casts')
-    assert_true(triuneContent:find("maxCastOpts") ~= nil, 'triune.lua defines maxCastOpts (Unl to 10)')
-    assert_true(triuneContent:find("runtime.npcCastCounts") ~= nil, 'triune.lua tracks npcCastCounts')
+    -- Source verification for mcac.lua
+    local mcacContent = readFile('MCAC/lua/mcac/init.lua')
+    assert_true(mcacContent:find("ImGui.Combo%('##mc'") ~= nil, 'mcac.lua uses ##mc combo for max_casts')
+    assert_true(mcacContent:find("maxCastOpts") ~= nil, 'mcac.lua defines maxCastOpts (Unl to 10)')
+    assert_true(mcacContent:find("runtime.npcCastCounts") ~= nil, 'mcac.lua tracks npcCastCounts')
 end
 
 -- ============================================================================
@@ -3761,14 +3761,14 @@ do
     assert_true(not isT2Active, 'timer group: T2 has expired')
 
     -- E. Cooldowns is a popout window only (no main-window tab)
-    local triuneContent = readFile('TAC/lua/triune/init.lua')
-    local cdContent = readFile('TAC/lua/tac/hud_cooldowns.lua')
-    assert_true(triuneContent:find('function UI.drawCooldownsTab()', 1, true) == nil, 'cooldown window: UI.drawCooldownsTab removed from triune.lua (hud_cooldowns plugin)')
+    local mcacContent = readFile('MCAC/lua/mcac/init.lua')
+    local cdContent = readFile('MCAC/lua/mcac/hud_cooldowns.lua')
+    assert_true(mcacContent:find('function UI.drawCooldownsTab()', 1, true) == nil, 'cooldown window: UI.drawCooldownsTab removed from mcac.lua (hud_cooldowns plugin)')
     assert_true(cdContent:find("ImGui.BeginTabItem('Cooldowns')", 1, true) == nil, 'cooldown window: hud_cooldowns no longer contributes a main-window tab')
     assert_true(cdContent:find('function plugin.onDrawTab', 1, true) == nil, 'cooldown window: hud_cooldowns defines no onDrawTab')
     assert_true(cdContent:find("M.renderCooldownContent('_win', true)", 1, true) ~= nil, 'cooldown window: popout renders the shared cooldown content')
     assert_true(cdContent:find("flag = 'show_cooldowns'", 1, true) ~= nil, 'cooldown window: hud_cooldowns declares its window for the header button')
-    assert_true(triuneContent:find('pm.drawTabs', 1, true) == nil, 'cooldown window: pm.drawTabs removed from the plugin manager')
+    assert_true(mcacContent:find('pm.drawTabs', 1, true) == nil, 'cooldown window: pm.drawTabs removed from the plugin manager')
 
     -- F. parseDurationSec & parseSpellRecastTime Comprehensive Tests
     local parseDurationSec = loadFunc(src, 'parseDurationSec', { tloTotalSeconds = loadFunc(src, 'tloTotalSeconds') }) -- real helper
@@ -4125,25 +4125,25 @@ do
     assert_true(matchAAName('Alternately Advanced Fireworks', 'Alternately Advanced Fireworks'), 'match: exact match')
     assert_eq(matchAAName('Combat Stability', 'Combat Agility'), false, 'match: different ability false')
 
-    -- K. Verify Auto AA tab & functions in triune.lua
-    local triuneContent = readFile('TAC/lua/triune/init.lua')
+    -- K. Verify Auto AA tab & functions in mcac.lua
+    local mcacContent = readFile('MCAC/lua/mcac/init.lua')
     assert_true(AA_CONTENT:find("function AA.drawWindow()") ~= nil, 'auto_aa defines AA.drawWindow (popout Auto AA window)')
     assert_true(AA_CONTENT:find("AA.drawWindow()") ~= nil, 'auto_aa invokes AA.drawWindow from onDrawUI')
-    assert_true(AA_CONTENT:find("AA.checkAutoSpendAA()") ~= nil, 'triune.lua includes AA.checkAutoSpendAA check')
-    assert_true(AA_CONTENT:find("AA.scanPlayerAAs") ~= nil, 'triune.lua defines AA.scanPlayerAAs')
-    assert_true(AA_CONTENT:find("AA.getFilteredSortedAAs") ~= nil, 'triune.lua defines AA.getFilteredSortedAAs')
-    assert_true(AA_CONTENT:find("AA.findAAInWindowLists") ~= nil, 'triune.lua defines AA.findAAInWindowLists')
-    assert_true(AA_CONTENT:find("AA.findChildRecursive") ~= nil, 'triune.lua defines AA.findChildRecursive')
-    assert_true(AA_CONTENT:find("AAW_SpecialList") ~= nil, 'triune.lua scans AAW_SpecialList')
-    assert_true(AA_CONTENT:find("AAW_TrainButton") ~= nil, 'triune.lua clicks AAW_TrainButton')
-    assert_true(AA_CONTENT:find("AAW_Subwindows") ~= nil, 'triune.lua notifies AAW_Subwindows')
-    assert_true(AA_CONTENT:find("AA.readSpecialTabOnce") ~= nil, 'triune.lua defines AA.readSpecialTabOnce')
-    assert_true(AA_CONTENT:find("AA.readSpecialTabNamesFromUI") ~= nil, 'triune.lua defines AA.readSpecialTabNamesFromUI')
-    assert_true(AA_CONTENT:find("AA.specialTabAAs") ~= nil, 'triune.lua tracks AA.specialTabAAs')
-    assert_true(AA_CONTENT:find("TacAAPurchased") ~= nil, 'triune.lua registers TacAAPurchased event')
-    assert_true(AA_CONTENT:find("AA.lastObservedAAPointsSpent") ~= nil, 'triune.lua tracks lastObservedAAPointsSpent')
-    assert_true(AA_CONTENT:find("AA.pendingPostTrainScanAt") ~= nil, 'triune.lua tracks pendingPostTrainScanAt')
-    assert_true(AA_CONTENT:find("AA.checkAutoSummonFireworks()") ~= nil, 'triune.lua includes AA.checkAutoSummonFireworks check')
+    assert_true(AA_CONTENT:find("AA.checkAutoSpendAA()") ~= nil, 'mcac.lua includes AA.checkAutoSpendAA check')
+    assert_true(AA_CONTENT:find("AA.scanPlayerAAs") ~= nil, 'mcac.lua defines AA.scanPlayerAAs')
+    assert_true(AA_CONTENT:find("AA.getFilteredSortedAAs") ~= nil, 'mcac.lua defines AA.getFilteredSortedAAs')
+    assert_true(AA_CONTENT:find("AA.findAAInWindowLists") ~= nil, 'mcac.lua defines AA.findAAInWindowLists')
+    assert_true(AA_CONTENT:find("AA.findChildRecursive") ~= nil, 'mcac.lua defines AA.findChildRecursive')
+    assert_true(AA_CONTENT:find("AAW_SpecialList") ~= nil, 'mcac.lua scans AAW_SpecialList')
+    assert_true(AA_CONTENT:find("AAW_TrainButton") ~= nil, 'mcac.lua clicks AAW_TrainButton')
+    assert_true(AA_CONTENT:find("AAW_Subwindows") ~= nil, 'mcac.lua notifies AAW_Subwindows')
+    assert_true(AA_CONTENT:find("AA.readSpecialTabOnce") ~= nil, 'mcac.lua defines AA.readSpecialTabOnce')
+    assert_true(AA_CONTENT:find("AA.readSpecialTabNamesFromUI") ~= nil, 'mcac.lua defines AA.readSpecialTabNamesFromUI')
+    assert_true(AA_CONTENT:find("AA.specialTabAAs") ~= nil, 'mcac.lua tracks AA.specialTabAAs')
+    assert_true(AA_CONTENT:find("McacAAPurchased") ~= nil, 'mcac.lua registers McacAAPurchased event')
+    assert_true(AA_CONTENT:find("AA.lastObservedAAPointsSpent") ~= nil, 'mcac.lua tracks lastObservedAAPointsSpent')
+    assert_true(AA_CONTENT:find("AA.pendingPostTrainScanAt") ~= nil, 'mcac.lua tracks pendingPostTrainScanAt')
+    assert_true(AA_CONTENT:find("AA.checkAutoSummonFireworks()") ~= nil, 'mcac.lua includes AA.checkAutoSummonFireworks check')
 end
 
 -- ============================================================================
@@ -4252,27 +4252,27 @@ do
     assert_true(trioMixed[3].isPetCls, 'slot 3: Enc is pet class')
     assert_eq(trioMixed[3].scope, 'enc', 'slot 3 scope: enc')
 
-    -- E. triune.lua Source Verification
-    local triuneContent = readFile('TAC/lua/triune/init.lua')
-    assert_true(triuneContent:find("function UI.drawPetControlTab()") ~= nil, 'triune.lua defines UI.drawPetControlTab')
-    assert_true(triuneContent:find("ImGui.BeginTabItem%('Pets'%)") ~= nil, 'triune.lua uses Pets as tab label')
-    local tabOrderMatch = triuneContent:find("UI.drawControlTab%(%)[%s\r\n]+UI.drawPetControlTab%(%)[%s\r\n]+UI.drawGemTab%(%)")
-    assert_true(tabOrderMatch ~= nil, 'triune.lua places UI.drawPetControlTab right next to Control tab and before Gem tab')
-    local tabOrderMatch2 = triuneContent:find("UI.drawAATab%(%)[%s\r\n]+UI.drawDiscTab%(%)[%s\r\n]+UI.drawClickieTab%(%)[%s\r\n]+UI.drawSettingsTab%(%)")
-    assert_true(tabOrderMatch2 ~= nil, 'triune.lua places Disciplines and Clickies between AAs and Settings (no plugin tabs)')
+    -- E. mcac.lua Source Verification
+    local mcacContent = readFile('MCAC/lua/mcac/init.lua')
+    assert_true(mcacContent:find("function UI.drawPetControlTab()") ~= nil, 'mcac.lua defines UI.drawPetControlTab')
+    assert_true(mcacContent:find("ImGui.BeginTabItem%('Pets'%)") ~= nil, 'mcac.lua uses Pets as tab label')
+    local tabOrderMatch = mcacContent:find("UI.drawControlTab%(%)[%s\r\n]+UI.drawPetControlTab%(%)[%s\r\n]+UI.drawGemTab%(%)")
+    assert_true(tabOrderMatch ~= nil, 'mcac.lua places UI.drawPetControlTab right next to Control tab and before Gem tab')
+    local tabOrderMatch2 = mcacContent:find("UI.drawAATab%(%)[%s\r\n]+UI.drawDiscTab%(%)[%s\r\n]+UI.drawClickieTab%(%)[%s\r\n]+UI.drawSettingsTab%(%)")
+    assert_true(tabOrderMatch2 ~= nil, 'mcac.lua places Disciplines and Clickies between AAs and Settings (no plugin tabs)')
     assert_true(AA_CONTENT:find("ImGui.BeginTabItem('Auto AA')", 1, true) == nil, 'auto_aa plugin no longer contributes a main-window tab')
-    assert_true(AA_CONTENT:find("###triuneAutoAA'", 1, true) ~= nil, 'auto_aa plugin draws the Auto AA popout window')
+    assert_true(AA_CONTENT:find("###mcacAutoAA'", 1, true) ~= nil, 'auto_aa plugin draws the Auto AA popout window')
     assert_true(AA_CONTENT:find("flag = 'show_auto_aa'", 1, true) ~= nil, 'auto_aa plugin declares its window for the header button')
-    local settingsTabMatch = triuneContent:find("UI.drawSettingsTab%(%)[%s\r\n]+UI.drawHelpTab%(%)")
-    assert_true(settingsTabMatch ~= nil, 'triune.lua places UI.drawSettingsTab right before the Help tab')
-    assert_true(triuneContent:find("PET_CLASSES%s*=%s*{[^}]*Brd%s*=%s*true") ~= nil, 'triune.lua includes Brd in petState.PET_CLASSES')
-    assert_true(triuneContent:find("function UI.drawPetControlTab") ~= nil, 'triune.lua includes drawPetControlTab renderer')
-    assert_true(triuneContent:find("sendPetCmd%(") ~= nil, 'triune.lua includes sendPetCmd helper')
-    assert_true(triuneContent:find("getMultiPetList%(") ~= nil, 'triune.lua includes getMultiPetList helper')
-    assert_true(triuneContent:find("cmd == 'pet'") ~= nil, 'triune.lua includes /ac pet slash command')
-    assert_true(triuneContent:find("/pet report##petRpt") ~= nil, 'triune.lua includes /pet report button on pet slot cards')
-    assert_true(triuneContent:find("Pet Stats Report##petStatsModal") ~= nil, 'triune.lua includes Pet Stats Report modal popup window')
-    assert_true(triuneContent:find("petState%.inspectPetId") ~= nil, 'triune.lua tracks petState.inspectPetId')
+    local settingsTabMatch = mcacContent:find("UI.drawSettingsTab%(%)[%s\r\n]+UI.drawHelpTab%(%)")
+    assert_true(settingsTabMatch ~= nil, 'mcac.lua places UI.drawSettingsTab right before the Help tab')
+    assert_true(mcacContent:find("PET_CLASSES%s*=%s*{[^}]*Brd%s*=%s*true") ~= nil, 'mcac.lua includes Brd in petState.PET_CLASSES')
+    assert_true(mcacContent:find("function UI.drawPetControlTab") ~= nil, 'mcac.lua includes drawPetControlTab renderer')
+    assert_true(mcacContent:find("sendPetCmd%(") ~= nil, 'mcac.lua includes sendPetCmd helper')
+    assert_true(mcacContent:find("getMultiPetList%(") ~= nil, 'mcac.lua includes getMultiPetList helper')
+    assert_true(mcacContent:find("cmd == 'pet'") ~= nil, 'mcac.lua includes /ac pet slash command')
+    assert_true(mcacContent:find("/pet report##petRpt") ~= nil, 'mcac.lua includes /pet report button on pet slot cards')
+    assert_true(mcacContent:find("Pet Stats Report##petStatsModal") ~= nil, 'mcac.lua includes Pet Stats Report modal popup window')
+    assert_true(mcacContent:find("petState%.inspectPetId") ~= nil, 'mcac.lua tracks petState.inspectPetId')
 end
 
 -- ============================================================================
@@ -4280,24 +4280,24 @@ end
 -- ============================================================================
 print('--- ImGui Child Window Safety Checks ---')
 do
-    local triuneContent = readFile('TAC/lua/triune/init.lua')
-    assert_true(triuneContent:find("ImGui.EndChild%(%)[%s\r\n]+end[%s\r\n]+ImGui.PopStyleVar%(2%)") == nil,
+    local mcacContent = readFile('MCAC/lua/mcac/init.lua')
+    assert_true(mcacContent:find("ImGui.EndChild%(%)[%s\r\n]+end[%s\r\n]+ImGui.PopStyleVar%(2%)") == nil,
         'lists do not place EndChild inside BeginChild if block')
-    assert_true(triuneContent:find("end[%s\r\n]+ImGui.EndChild%(%)[%s\r\n]+ImGui.PopStyleVar%(2%)") ~= nil,
+    assert_true(mcacContent:find("end[%s\r\n]+ImGui.EndChild%(%)[%s\r\n]+ImGui.PopStyleVar%(2%)") ~= nil,
         'lists call EndChild unconditionally outside BeginChild if block')
 
     -- Abilities, AA, and Disc list child safety checks
-    assert_true(triuneContent:find("abilitieslist.-end[%s\r\n]+ImGui.EndChild%(%)[%s\r\n]+ImGui.PopStyleVar%(2%)") ~= nil,
+    assert_true(mcacContent:find("abilitieslist.-end[%s\r\n]+ImGui.EndChild%(%)[%s\r\n]+ImGui.PopStyleVar%(2%)") ~= nil,
         'abilitieslist calls EndChild unconditionally outside BeginChild if block')
-    assert_true(triuneContent:find("aalist.-end[%s\r\n]+ImGui.EndChild%(%)[%s\r\n]+ImGui.PopStyleVar%(2%)") ~= nil,
+    assert_true(mcacContent:find("aalist.-end[%s\r\n]+ImGui.EndChild%(%)[%s\r\n]+ImGui.PopStyleVar%(2%)") ~= nil,
         'aalist calls EndChild unconditionally outside BeginChild if block')
-    assert_true(triuneContent:find("disclist.-end[%s\r\n]+ImGui.EndChild%(%)[%s\r\n]+ImGui.PopStyleVar%(2%)") ~= nil,
+    assert_true(mcacContent:find("disclist.-end[%s\r\n]+ImGui.EndChild%(%)[%s\r\n]+ImGui.PopStyleVar%(2%)") ~= nil,
         'disclist calls EndChild unconditionally outside BeginChild if block')
-    assert_true(triuneContent:find("clickielist.-end[%s\r\n]+ImGui.EndChild%(%)[%s\r\n]+ImGui.PopStyleVar%(2%)") ~= nil,
+    assert_true(mcacContent:find("clickielist.-end[%s\r\n]+ImGui.EndChild%(%)[%s\r\n]+ImGui.PopStyleVar%(2%)") ~= nil,
         'clickielist calls EndChild unconditionally outside BeginChild if block')
 
     -- Clickies compact layout checks
-    local clickieTabBody = triuneContent:match("function UI%.drawClickieTab%(%).-ImGui%.EndTabItem%(%)")
+    local clickieTabBody = mcacContent:match("function UI%.drawClickieTab%(%).-ImGui%.EndTabItem%(%)")
     assert_true(clickieTabBody ~= nil, 'drawClickieTab body extracted')
     assert_true(clickieTabBody:find("ImGuiStyleVar%.ItemSpacing,%s*4,%s*3") ~= nil, 'drawClickieTab uses compact ItemSpacing (4, 3)')
     assert_true(clickieTabBody:find("ImGuiStyleVar%.FramePadding,%s*4,%s*3") ~= nil, 'drawClickieTab uses compact FramePadding (4, 3)')
@@ -4310,7 +4310,7 @@ do
     assert_true(clickieTabBody:find("isDis and 'Off' or '%%d%%%%'") ~= nil, 'drawClickieTab uses Off label for 0% disabled threshold')
 
     -- createCastTracker scoping check
-    local trackerBody = triuneContent:match("local function createCastTracker%(%).-return tracker[%s\r\n]+end")
+    local trackerBody = mcacContent:match("local function createCastTracker%(%).-return tracker[%s\r\n]+end")
     assert_true(trackerBody ~= nil, 'createCastTracker function body found')
     assert_true(trackerBody:find("castTracker") == nil, 'createCastTracker function body never references castTracker before declaration')
 end
@@ -4320,14 +4320,14 @@ end
 -- ============================================================================
 print('--- Ability Health Threshold & Feign Death Evaluation ---')
 do
-    local triuneContent = readFile('TAC/lua/triune/init.lua')
+    local mcacContent = readFile('MCAC/lua/mcac/init.lua')
 
     -- Verify UI guard ensures Autoskill checkbox is only shown for eligible skills
-    assert_true(triuneContent:find("if isAutoskillEligible%(nm%) then[%s\r\n]+ImGui%.SameLine%(%)[%s\r\n]+local asVal = ImGui%.Checkbox%('Auto##as'") ~= nil,
+    assert_true(mcacContent:find("if isAutoskillEligible%(nm%) then[%s\r\n]+ImGui%.SameLine%(%)[%s\r\n]+local asVal = ImGui%.Checkbox%('Auto##as'") ~= nil,
         'UI.drawAbilitiesTab guards Auto##as with isAutoskillEligible(nm)')
 
     -- Verify combatTick autoskill loop checks isAutoskillEligible
-    assert_true(triuneContent:find("act%.autoskill and isAutoskillEligible%(name%)") ~= nil,
+    assert_true(mcacContent:find("act%.autoskill and isAutoskillEligible%(name%)") ~= nil,
         'combatTick autoskill loop checks isAutoskillEligible(name)')
 
     -- Mock player and world spawn state
@@ -4488,7 +4488,7 @@ end
 -- ============================================================================
 print('--- Target Retention During Spell Casting ---')
 do
-    -- Real triune.lua helpers (isTargetRequiredSpell, isCastingOrStarting,
+    -- Real mcac.lua helpers (isTargetRequiredSpell, isCastingOrStarting,
     -- getActiveTargetRequiredCastingId, setTarget, clearTarget,
     -- checkAggroSwitch) run against a mock TLO driven by mockState below.
     local spellMap = {
@@ -4661,7 +4661,7 @@ do
     mockState.castTracker.activeSpell = nil
 
     -- The real helper: only a heal may go out with the mob still targeted.
-    local castThroughHostileTarget = loadFunc(triuneSrc, 'castThroughHostileTarget', {})
+    local castThroughHostileTarget = loadFunc(mcacSrc, 'castThroughHostileTarget', {})
 
     -- 3. Self-healing while attacking an enemy mob #1001
     -- In combat with a hostile target, character casts Greater Healing on self (myId) without switching target
@@ -5299,13 +5299,13 @@ do
     assert_eq(existingLoadout[4].spell, 'Downtime Buff 1', 'retained gem 9 line')
     assert_eq(existingLoadout[5].spell, 'Downtime Buff 2', 'retained gem 12 line')
 
-    -- 5. triune.lua source verification for Import Bar button & slash command
-    local triuneCode = readFile('TAC/lua/triune/init.lua')
-    assert_true(triuneCode:find("function runtime.importCurrentGems", 1, true) ~= nil, 'triune.lua defines runtime.importCurrentGems')
-    assert_true(triuneCode:find("Import Bar##importBarBtn", 1, true) ~= nil, 'triune.lua includes Import Bar button in UI.drawGemTabHeader')
-    assert_true(triuneCode:find("Auto-populate spell lines based on what is currently memorized on your spell gems.", 1, true) ~= nil, 'triune.lua includes descriptive tooltip on Import Bar')
-    assert_true(triuneCode:find('Click "+ Add Spell" or "Import Bar" above to populate your spell list.', 1, true) ~= nil, 'triune.lua mentions Import Bar in empty gem list hint')
-    assert_true(triuneCode:find("cmd == 'importbar' or cmd == 'import'", 1, true) ~= nil, 'triune.lua handles /ac importbar and /ac import slash command')
+    -- 5. mcac.lua source verification for Import Bar button & slash command
+    local mcacCode = readFile('MCAC/lua/mcac/init.lua')
+    assert_true(mcacCode:find("function runtime.importCurrentGems", 1, true) ~= nil, 'mcac.lua defines runtime.importCurrentGems')
+    assert_true(mcacCode:find("Import Bar##importBarBtn", 1, true) ~= nil, 'mcac.lua includes Import Bar button in UI.drawGemTabHeader')
+    assert_true(mcacCode:find("Auto-populate spell lines based on what is currently memorized on your spell gems.", 1, true) ~= nil, 'mcac.lua includes descriptive tooltip on Import Bar')
+    assert_true(mcacCode:find('Click "+ Add Spell" or "Import Bar" above to populate your spell list.', 1, true) ~= nil, 'mcac.lua mentions Import Bar in empty gem list hint')
+    assert_true(mcacCode:find("cmd == 'importbar' or cmd == 'import'", 1, true) ~= nil, 'mcac.lua handles /ac importbar and /ac import slash command')
 end
 
 -- ============================================================================
@@ -5719,23 +5719,23 @@ do
 end
 
 do
-    -- triune.lua source code validations
-    assert_true(src:find("runtime.getMaTargetInfo") ~= nil, 'triune.lua defines runtime.getMaTargetInfo')
-    assert_true(src:find("runtime.getAssistCandidates") ~= nil, 'triune.lua defines runtime.getAssistCandidates')
-    assert_true(src:find("runtime.addCustomAssistTarget") ~= nil, 'triune.lua defines runtime.addCustomAssistTarget')
-    assert_true(src:find("runtime.removeCustomAssist") ~= nil, 'triune.lua defines runtime.removeCustomAssist')
-    assert_true(src:find("##maSelectCombo") ~= nil, 'triune.lua renders ##maSelectCombo dropdown')
-    assert_true(src:find("+ Add Target##maAdd") ~= nil, 'triune.lua renders + Add Target button')
-    assert_true(src:find("Remove##maRemove") ~= nil, 'triune.lua renders Remove button')
-    assert_true(src:find("statCardTargMA") ~= nil, 'triune.lua renders MA target button on Status card')
-    assert_true(src:find("miniTargMA") ~= nil, 'triune.lua renders MA target button in Compact mode')
-    assert_true(src:find("##assistXtarDist") ~= nil, 'triune.lua renders Max XTarget Chase Range slider in Assist mode')
-    assert_true(src:find("cmd == 'xtardist'") ~= nil, 'triune.lua handles /ac xtardist slash command')
-    assert_true(src:find("##assistChaseDist") ~= nil, 'triune.lua renders Chase Distance slider in Assist mode')
-    assert_true(src:find("cmd == 'chasedist'") ~= nil, 'triune.lua handles /ac chasedist slash command')
-    assert_true(src:find("##assistSelfDefense") ~= nil, 'triune.lua renders Self-Defense When Attacked checkbox')
-    assert_true(src:find("cmd == 'selfdefense'") ~= nil, 'triune.lua handles /ac selfdefense slash command')
-    assert_true(src:find("runtime.findSelfDefenseTarget") ~= nil, 'triune.lua implements runtime.findSelfDefenseTarget')
+    -- mcac.lua source code validations
+    assert_true(src:find("runtime.getMaTargetInfo") ~= nil, 'mcac.lua defines runtime.getMaTargetInfo')
+    assert_true(src:find("runtime.getAssistCandidates") ~= nil, 'mcac.lua defines runtime.getAssistCandidates')
+    assert_true(src:find("runtime.addCustomAssistTarget") ~= nil, 'mcac.lua defines runtime.addCustomAssistTarget')
+    assert_true(src:find("runtime.removeCustomAssist") ~= nil, 'mcac.lua defines runtime.removeCustomAssist')
+    assert_true(src:find("##maSelectCombo") ~= nil, 'mcac.lua renders ##maSelectCombo dropdown')
+    assert_true(src:find("+ Add Target##maAdd") ~= nil, 'mcac.lua renders + Add Target button')
+    assert_true(src:find("Remove##maRemove") ~= nil, 'mcac.lua renders Remove button')
+    assert_true(src:find("statCardTargMA") ~= nil, 'mcac.lua renders MA target button on Status card')
+    assert_true(src:find("miniTargMA") ~= nil, 'mcac.lua renders MA target button in Compact mode')
+    assert_true(src:find("##assistXtarDist") ~= nil, 'mcac.lua renders Max XTarget Chase Range slider in Assist mode')
+    assert_true(src:find("cmd == 'xtardist'") ~= nil, 'mcac.lua handles /ac xtardist slash command')
+    assert_true(src:find("##assistChaseDist") ~= nil, 'mcac.lua renders Chase Distance slider in Assist mode')
+    assert_true(src:find("cmd == 'chasedist'") ~= nil, 'mcac.lua handles /ac chasedist slash command')
+    assert_true(src:find("##assistSelfDefense") ~= nil, 'mcac.lua renders Self-Defense When Attacked checkbox')
+    assert_true(src:find("cmd == 'selfdefense'") ~= nil, 'mcac.lua handles /ac selfdefense slash command')
+    assert_true(src:find("runtime.findSelfDefenseTarget") ~= nil, 'mcac.lua implements runtime.findSelfDefenseTarget')
 
     -- 8. Assist mode XTarget / MA target distance gating logic
     local function evaluateAssistEngagement(ctrlTable, targetDist, pctHp, isEngaged)
@@ -5805,7 +5805,7 @@ end
 
 do
     -- 10. targetIsEngaged validation and auto-attack disengage logic
-    assert_true(src:find("mq.cmd%('/attack off'%)") ~= nil, 'triune.lua calls /attack off when disengaging')
+    assert_true(src:find("mq.cmd%('/attack off'%)") ~= nil, 'mcac.lua calls /attack off when disengaging')
 
     local function evaluateTargetIsEngaged(isXtar, hpPct, totId, aggroId, myId, groupIds, maTargetId, maInCombat, targetId)
         if isXtar then return true end
@@ -5874,16 +5874,16 @@ end
 print('--- Main Chunk Local Variables Limit Verification ---')
 do
     local files = {
-        'TAC/lua/triune/init.lua',
-        'TAC/lua/tac/spellbook.lua',
-        'TAC/lua/tac/auto_aa.lua',
-        'TAC/lua/tac/hud_cooldowns.lua',
-        'TAC/lua/tac/buffbot.lua',
-        'TAC/lua/tac/cursor.lua',
-        'TAC/lua/tac/dps.lua',
-        'TAC/lua/tac/inventory.lua',
-        'TAC/lua/tac/map.lua',
-        'TAC/lua/tac/gamedb.lua',
+        'MCAC/lua/mcac/init.lua',
+        'MCAC/lua/mcac/spellbook.lua',
+        'MCAC/lua/mcac/auto_aa.lua',
+        'MCAC/lua/mcac/hud_cooldowns.lua',
+        'MCAC/lua/mcac/buffbot.lua',
+        'MCAC/lua/mcac/cursor.lua',
+        'MCAC/lua/mcac/dps.lua',
+        'MCAC/lua/mcac/inventory.lua',
+        'MCAC/lua/mcac/map.lua',
+        'MCAC/lua/mcac/gamedb.lua',
     }
 
     -- Register counts differ between Lua versions; prefer the 5.1 compiler
@@ -5908,8 +5908,8 @@ do
             local slots = tonumber(out:match('(%d+)%s+slots'))
             assert_true(slots ~= nil, string.format('%s -l lists %s (no syntax / 200 local limit error); output: %s', luac, filePath, out:sub(1, 200)))
             assert_true(not out:find('too many local variables'), string.format('%s does not exceed 200 local variables limit', filePath))
-            if slots and filePath == 'TAC/lua/triune/init.lua' then
-                assert_true(slots <= 185, string.format('triune.lua main chunk slots (%d) has comfortable buffer under 200 limit (<= 185)', slots))
+            if slots and filePath == 'MCAC/lua/mcac/init.lua' then
+                assert_true(slots <= 185, string.format('mcac.lua main chunk slots (%d) has comfortable buffer under 200 limit (<= 185)', slots))
             end
         end
     end
@@ -6155,10 +6155,10 @@ do
 end
 
 -- ============================================================================
--- Suite 53: Triune Code Audit Fixes & Logic Verification
+-- Suite 53: MCAC Code Audit Fixes & Logic Verification
 -- ============================================================================
 do
-    print('--- Triune Code Audit Fixes & Logic Verification ---')
+    print('--- MCAC Code Audit Fixes & Logic Verification ---')
 
     -- 1. Verify /ac clear lockouts command condition matching
     local function parseClearLockouts(cmd, args)
@@ -6271,7 +6271,7 @@ do
             },
         },
     }
-    local aaPlugin = assert(loadfile('TAC/lua/tac/auto_accept.lua'))()
+    local aaPlugin = assert(loadfile('MCAC/lua/mcac/auto_accept.lua'))()
     local okAAInit, errAAInit = pcall(aaPlugin.onInit, mockCore)
     assert_true(okAAInit, 'Suite 55: auto_accept.onInit runs against mock core: ' .. tostring(errAAInit))
     assert_type(aaPlugin.isAutoAcceptAllowed, 'function', 'Suite 55: plugin exposes isAutoAcceptAllowed')
@@ -6391,23 +6391,23 @@ do
     print = realPrint
 
     -- 3. The core no longer carries its own copy of the auto-accept engine
-    local triuneSrc = readFile('TAC/lua/triune/init.lua')
-    assert_true(triuneSrc:find('function runtime%.checkAutoAccept') == nil,
-        'Suite 55: runtime.checkAutoAccept removed from triune.lua (owned by auto_accept plugin)')
-    assert_true(triuneSrc:find('function runtime%.isAutoAcceptAllowed') == nil,
-        'Suite 55: runtime.isAutoAcceptAllowed removed from triune.lua (owned by auto_accept plugin)')
-    assert_true(triuneSrc:find("mq%.event%('TriuneAutoGroupInvite") == nil,
+    local mcacSrc = readFile('MCAC/lua/mcac/init.lua')
+    assert_true(mcacSrc:find('function runtime%.checkAutoAccept') == nil,
+        'Suite 55: runtime.checkAutoAccept removed from mcac.lua (owned by auto_accept plugin)')
+    assert_true(mcacSrc:find('function runtime%.isAutoAcceptAllowed') == nil,
+        'Suite 55: runtime.isAutoAcceptAllowed removed from mcac.lua (owned by auto_accept plugin)')
+    assert_true(mcacSrc:find("mq%.event%('MCACAutoGroupInvite") == nil,
         'Suite 55: core no longer registers its own group-invite chat events')
-    assert_true(triuneSrc:find("drawPluginSettings%('auto_accept'%)") == nil,
+    assert_true(mcacSrc:find("drawPluginSettings%('auto_accept'%)") == nil,
         'Suite 55: Settings -> Auto-Accept sub-tab removed (Auto-Accept is a popout window)')
-    assert_true(triuneSrc:find("Auto%-Accept##settingsAutoAccept") == nil,
+    assert_true(mcacSrc:find("Auto%-Accept##settingsAutoAccept") == nil,
         'Suite 55: no Auto-Accept tab in the Settings tab bar')
-    local aaSrc = readFile('TAC/lua/tac/auto_accept.lua')
-    assert_true(aaSrc:find("###triuneAutoAccept'", 1, true) ~= nil,
-        'Suite 55: auto_accept draws the Triune Auto-Accept popout window')
+    local aaSrc = readFile('MCAC/lua/mcac/auto_accept.lua')
+    assert_true(aaSrc:find("###mcacAutoAccept'", 1, true) ~= nil,
+        'Suite 55: auto_accept draws the MCAC Auto-Accept popout window')
     assert_true(aaSrc:find("flag = 'show_auto_accept'", 1, true) ~= nil,
         'Suite 55: auto_accept declares its window for the header button / layout manager')
-    assert_true(aaSrc:find("'TacAutoGroupInvite1'") ~= nil and aaSrc:find("'TacAutoDZInvite3'") ~= nil,
+    assert_true(aaSrc:find("'McacAutoGroupInvite1'") ~= nil and aaSrc:find("'McacAutoDZInvite3'") ~= nil,
         'Suite 55: auto_accept plugin registers the group/DZ chat events')
     assert_true(aaSrc:find('HisTradeReady') ~= nil and aaSrc:find('Me%.Invited') ~= nil,
         'Suite 55: auto_accept plugin polls Me.Invited and TradeWnd ready state')
@@ -6794,24 +6794,24 @@ do
     assert_eq(calcDesiredRange(50, 45), 48, 'Dragon spawnReach 45 with userDist 50 targets 48')
     assert_eq(calcMaxMeleeDistance(50, 45), 50, 'Dragon spawnReach 45 with userDist 50 max reach is 50')
 
-    -- 7. triune.lua source code assertions: verify hardcoded clamps were eliminated
-    local triuneCode = readFile('TAC/lua/triune/init.lua')
-    assert_true(triuneCode:find("math.min(12, (ctrl and ctrl.melee_dist) or 12)", 1, true) == nil,
-        'triune.lua eliminated hardcoded 12 clamp in getBehindLoc')
-    assert_true(triuneCode:find("math.min(userDist, maxSafe)", 1, true) == nil,
-        'triune.lua eliminated math.min(userDist, maxSafe) clamp in desiredRange')
-    assert_true(triuneCode:find("spawnReach > 18 and spawnReach > userDist", 1, true) ~= nil,
-        'triune.lua uses oversized threshold check for giant hitboxes')
-    assert_true(triuneCode:find("lastBehindStickDist", 1, true) ~= nil,
-        'triune.lua tracks lastBehindStickDist in pursuit table')
+    -- 7. mcac.lua source code assertions: verify hardcoded clamps were eliminated
+    local mcacCode = readFile('MCAC/lua/mcac/init.lua')
+    assert_true(mcacCode:find("math.min(12, (ctrl and ctrl.melee_dist) or 12)", 1, true) == nil,
+        'mcac.lua eliminated hardcoded 12 clamp in getBehindLoc')
+    assert_true(mcacCode:find("math.min(userDist, maxSafe)", 1, true) == nil,
+        'mcac.lua eliminated math.min(userDist, maxSafe) clamp in desiredRange')
+    assert_true(mcacCode:find("spawnReach > 18 and spawnReach > userDist", 1, true) ~= nil,
+        'mcac.lua uses oversized threshold check for giant hitboxes')
+    assert_true(mcacCode:find("lastBehindStickDist", 1, true) ~= nil,
+        'mcac.lua tracks lastBehindStickDist in pursuit table')
 end
 
 -- ============================================================================
--- 104. triune_inv.lua — Inventory & Bank Manager Pure Logic Tests
+-- 104. mcac_inv.lua — Inventory & Bank Manager Pure Logic Tests
 -- ============================================================================
-print('--- triune_inv.lua pure logic tests ---')
+print('--- mcac_inv.lua pure logic tests ---')
 do
-    local invSrc = readFile('TAC/lua/tac/inventory.lua')
+    local invSrc = readFile('MCAC/lua/mcac/inventory.lua')
     local formatMoney = loadFunc(invSrc, 'formatMoney', {})
     local classifyItem = loadFunc(invSrc, 'classifyItem', {})
     local matchesFilter = loadFunc(invSrc, 'matchesFilter', {})
@@ -7197,7 +7197,7 @@ end
 -- ============================================================================
 do
     print('--- Suite 62: AA Special Tab Scan Loop Prevention ---')
-    local triuneContent = readFile('TAC/lua/triune/init.lua')
+    local mcacContent = readFile('MCAC/lua/mcac/init.lua')
 
     -- 1. Verify readSpecialTabOnce marks read as done even on failure and never retries
     local mockRuntime = {
@@ -7228,7 +7228,7 @@ do
     local res2 = mockReadSpecialTabOnce(mockRuntime, false)
     assert_eq(#res2, 0, 'Suite 62: subsequent call returns cached empty list without retrying UI')
 
-    -- 2. Verify scanPlayerAAs never sets pendingReadSpecialTab in triune.lua
+    -- 2. Verify scanPlayerAAs never sets pendingReadSpecialTab in mcac.lua
     assert_true(AA_CONTENT:find("if %(not specialList or #specialList == 0%) and not AA%.specialTabReadDone then") ~= nil,
         'Suite 62: scanPlayerAAs respects specialTabReadDone')
 
@@ -7239,7 +7239,7 @@ do
         'Suite 62: main loop clears pending read when auto_spend_aa disabled or paused')
 
     -- 4. Verify script startup does NOT unconditionally queue pendingReadSpecialTab
-    assert_eq(triuneContent:find("runtime%.pendingReadSpecialTab = true%s*runMainLoop"), nil,
+    assert_eq(mcacContent:find("runtime%.pendingReadSpecialTab = true%s*runMainLoop"), nil,
         'Suite 62: startup does not unconditionally queue pendingReadSpecialTab')
 end
 
@@ -7389,12 +7389,12 @@ do
     assert_eq(#list3, 1, 'Suite 63: ability recorded with fallback cost')
     assert_true(list3[1].cost >= 1, 'Suite 63: fallback cost is positive (>= 1)')
 
-    -- 6. Verify triune.lua defines enhanced recursive scanning and UI list extraction
-    local triuneContent = readFile('TAC/lua/triune/init.lua')
-    assert_true(AA_CONTENT:find("AAW_ArchList") ~= nil, 'Suite 63: triune.lua searches AAW_ArchList')
-    assert_true(AA_CONTENT:find("curMaxTxt:match") ~= nil, 'Suite 63: triune.lua parses curMaxTxt column')
-    assert_true(AA_CONTENT:find("costTxt:match") ~= nil, 'Suite 63: triune.lua parses costTxt column')
-    assert_true(triuneContent:find("runtime.cachedAAData") ~= nil, 'Suite 63: triune.lua uses runtime.cachedAAData')
+    -- 6. Verify mcac.lua defines enhanced recursive scanning and UI list extraction
+    local mcacContent = readFile('MCAC/lua/mcac/init.lua')
+    assert_true(AA_CONTENT:find("AAW_ArchList") ~= nil, 'Suite 63: mcac.lua searches AAW_ArchList')
+    assert_true(AA_CONTENT:find("curMaxTxt:match") ~= nil, 'Suite 63: mcac.lua parses curMaxTxt column')
+    assert_true(AA_CONTENT:find("costTxt:match") ~= nil, 'Suite 63: mcac.lua parses costTxt column')
+    assert_true(mcacContent:find("runtime.cachedAAData") ~= nil, 'Suite 63: mcac.lua uses runtime.cachedAAData')
 end
 
 print('--- Suite 64: MQ2AAspend Integration & Character Skill Rejection ---')
@@ -7480,7 +7480,7 @@ do
 
     -- 4. Source guards: the AA window trainer is the only purchase path.
     --    Nothing may load, drive or configure MQ2AAspend any more.
-    local triuneContent = readFile('TAC/lua/triune/init.lua')
+    local mcacContent = readFile('MCAC/lua/mcac/init.lua')
     local aaLower = AA_CONTENT:lower()
     assert_true(aaLower:find('/aaspend', 1, true) == nil, 'Suite 64: auto_aa.lua issues no /aaspend command')
     assert_true(aaLower:find('mq2aaspend load', 1, true) == nil, 'Suite 64: auto_aa.lua never loads the MQ2AAspend plugin')
@@ -7492,12 +7492,12 @@ do
     assert_true(AA_CONTENT:find('Sync to INI', 1, true) == nil, 'Suite 64: Sync to INI button removed')
     assert_true(AA_CONTENT:find('aaDelegateMaster', 1, true) == nil, 'Suite 64: MQ2AAspend delegation checkbox removed')
     assert_true(AA_CONTENT:find('function plugin.onLoadoutSaved', 1, true) == nil, 'Suite 64: no loadout-save hook (it only fed the INI)')
-    assert_true(triuneContent:find('auto_aa_delegate_aaspend = true', 1, true) == nil, 'Suite 64: triune.lua no longer defaults delegation on')
-    assert_true(triuneContent:find("auto_aa_aaspend_mode     = 'auto'", 1, true) == nil, 'Suite 64: triune.lua no longer defaults the MQ2AAspend mode')
-    assert_true(triuneContent:find('c.auto_aa_delegate_aaspend = nil', 1, true) ~= nil, 'Suite 64: triune.lua strips the stale delegation key from old loadouts')
+    assert_true(mcacContent:find('auto_aa_delegate_aaspend = true', 1, true) == nil, 'Suite 64: mcac.lua no longer defaults delegation on')
+    assert_true(mcacContent:find("auto_aa_aaspend_mode     = 'auto'", 1, true) == nil, 'Suite 64: mcac.lua no longer defaults the MQ2AAspend mode')
+    assert_true(mcacContent:find('c.auto_aa_delegate_aaspend = nil', 1, true) ~= nil, 'Suite 64: mcac.lua strips the stale delegation key from old loadouts')
     assert_true(AA_CONTENT:find("mq.TLO.Skill%(name%)") ~= nil, 'Suite 64: auto_aa.lua validates against mq.TLO.Skill')
-    assert_true(triuneContent:find("CLASS_AAS") == nil, 'Suite 64: triune.lua purged hardcoded CLASS_AAS')
-    assert_true(triuneContent:find("COMMON_AAS") == nil, 'Suite 64: triune.lua purged hardcoded COMMON_AAS')
+    assert_true(mcacContent:find("CLASS_AAS") == nil, 'Suite 64: mcac.lua purged hardcoded CLASS_AAS')
+    assert_true(mcacContent:find("COMMON_AAS") == nil, 'Suite 64: mcac.lua purged hardcoded COMMON_AAS')
     assert_true(AA_CONTENT:find("AA.isSpecialTabAA") ~= nil, 'Suite 64: auto_aa.lua defines isSpecialTabAA')
     assert_true(AA_CONTENT:find("function AA.startAATrainWorkflow") ~= nil, 'Suite 64: auto_aa.lua defines the AA window trainer')
     assert_true(AA_CONTENT:find("return AA.startAATrainWorkflow(target.name, allowStop)", 1, true) ~= nil, 'Suite 64: prioritized auto-spend goes straight to the window trainer')
@@ -7523,7 +7523,10 @@ do
     }
     -- isUnreachable reads its TTL from the 'Unreachable Mob Blacklist' tunable
     unreachEnv.ctrl = {}
-    unreachEnv.runtime = {}
+    unreachEnv.runtime = {
+        noteUnreachableBurst = unreachEnv.noteUnreachableBurst,
+        clearDetour = unreachEnv.clearDetour,
+    }
     unreachEnv.runtime.tuningDefs = loadFunc(src, 'tuningDefs', unreachEnv)
     unreachEnv.runtime.tune = loadFunc(src, 'tune', unreachEnv)
     local markUnreachable = loadFunc(src, 'markUnreachable', unreachEnv)
@@ -7558,14 +7561,14 @@ do
     markUnreachable(1005)
     assert_eq(unreachRuntime.xtForceId, 1004, 'Suite 65: an unrelated force target is kept')
 
-    -- 3. Source code validation in triune.lua (the approach watchdog lives
+    -- 3. Source code validation in mcac.lua (the approach watchdog lives
     -- inline in the combat tick, so it is checked by source contract)
-    local triuneContent = readFile('TAC/lua/triune/init.lua')
-    assert_true(triuneContent:find("pursuit.noPathFails") ~= nil, 'Suite 65: triune.lua tracks noPathFails')
-    assert_true(triuneContent:find("No navigation path to target") ~= nil, 'Suite 65: triune.lua logs no navigation path to target')
-    assert_true(triuneContent:find("Target #%%d %(%%s%) obstructed after 4 \"cannot hit\" attempts") ~= nil, 'Suite 65: triune.lua abandons after 4 cannot hit attempts')
-    assert_true(triuneContent:find("pursuit.approachStartedAt") ~= nil, 'Suite 65: triune.lua implements approachStartedAt watchdog')
-    assert_true(triuneContent:find("giving up on target") ~= nil, 'Suite 65: triune.lua maintains giving up on target')
+    local mcacContent = readFile('MCAC/lua/mcac/init.lua')
+    assert_true(mcacContent:find("pursuit.noPathFails") ~= nil, 'Suite 65: mcac.lua tracks noPathFails')
+    assert_true(mcacContent:find("No navigation path to target") ~= nil, 'Suite 65: mcac.lua logs no navigation path to target')
+    assert_true(mcacContent:find("Target #%%d %(%%s%) obstructed after 4 \"cannot hit\" attempts") ~= nil, 'Suite 65: mcac.lua abandons after 4 cannot hit attempts')
+    assert_true(mcacContent:find("pursuit.approachStartedAt") ~= nil, 'Suite 65: mcac.lua implements approachStartedAt watchdog')
+    assert_true(mcacContent:find("giving up on target") ~= nil, 'Suite 65: mcac.lua maintains giving up on target')
 end
 
 -- ============================================================================
@@ -7630,13 +7633,13 @@ do
     end
     assert_eq(countAliveNPCXtarget(mockDeadOnlyXtar), 0, 'Suite 66: countAliveNPCXtarget returns 0 when all XTargets dead')
 
-    -- 4. Source code validation in TAC/lua/triune/init.lua (the slain handler is
+    -- 4. Source code validation in MCAC/lua/mcac/init.lua (the slain handler is
     -- an inline event callback, so it is checked by source contract)
-    local triuneContent = readFile('TAC/lua/triune/init.lua')
-    assert_true(triuneContent:find("TriuneSlain1") ~= nil, 'Suite 66: triune.lua registers TriuneSlain1 event')
-    assert_true(triuneContent:find("TriuneSlain2") ~= nil, 'Suite 66: triune.lua registers TriuneSlain2 event')
-    assert_true(triuneContent:find("curHp and curHp <= 0") == nil, 'Suite 66: triune.lua does not falsely treat 0 HP as dead')
-    assert_true(triuneContent:find("isDead = matches or t.Dead()") ~= nil, 'Suite 66: triune.lua detects slain mob target')
+    local mcacContent = readFile('MCAC/lua/mcac/init.lua')
+    assert_true(mcacContent:find("MCACSlain1") ~= nil, 'Suite 66: mcac.lua registers MCACSlain1 event')
+    assert_true(mcacContent:find("MCACSlain2") ~= nil, 'Suite 66: mcac.lua registers MCACSlain2 event')
+    assert_true(mcacContent:find("curHp and curHp <= 0") == nil, 'Suite 66: mcac.lua does not falsely treat 0 HP as dead')
+    assert_true(mcacContent:find("isDead = matches or t.Dead()") ~= nil, 'Suite 66: mcac.lua detects slain mob target')
 end
 
 -- ============================================================================
@@ -7857,17 +7860,17 @@ do
     assert_eq(task.step, 'finish', 'Suite 67: wait_open aborts cleanly to finish when retries exceeded')
     assert_true(loggedAbort, 'Suite 67: logged clear abort warning when window failed to open')
 
-    -- 5. Source code validation in TAC/lua/triune/init.lua
-    local triuneContent = readFile('TAC/lua/triune/init.lua')
-    assert_true(AA_CONTENT:find("AA.getAAWindow") ~= nil, 'Suite 67: triune.lua defines AA.getAAWindow')
-    assert_true(AA_CONTENT:find("AA.getAAWindowName") ~= nil, 'Suite 67: triune.lua defines AA.getAAWindowName')
-    assert_true(AA_CONTENT:find("AA.isAAWindowOpen") ~= nil, 'Suite 67: triune.lua defines AA.isAAWindowOpen')
-    assert_true(AA_CONTENT:find("AA.openAAWindow") ~= nil, 'Suite 67: triune.lua defines AA.openAAWindow')
-    assert_true(AA_CONTENT:find("AA.closeAAWindow") ~= nil, 'Suite 67: triune.lua defines AA.closeAAWindow')
-    assert_true(AA_CONTENT:find("TOGGLE_ALTADVWIN") ~= nil, 'Suite 67: triune.lua uses TOGGLE_ALTADVWIN keypress')
-    assert_true(AA_CONTENT:find("IW_AltAdvBtn") ~= nil, 'Suite 67: triune.lua notifies IW_AltAdvBtn')
-    assert_true(AA_CONTENT:find("AAW_ResetFilter") ~= nil, 'Suite 67: triune.lua supports AAW_ResetFilter')
-    assert_true(AA_CONTENT:find("Failed to open AA Window after") ~= nil, 'Suite 67: triune.lua aborts cleanly when window fails to open')
+    -- 5. Source code validation in MCAC/lua/mcac/init.lua
+    local mcacContent = readFile('MCAC/lua/mcac/init.lua')
+    assert_true(AA_CONTENT:find("AA.getAAWindow") ~= nil, 'Suite 67: mcac.lua defines AA.getAAWindow')
+    assert_true(AA_CONTENT:find("AA.getAAWindowName") ~= nil, 'Suite 67: mcac.lua defines AA.getAAWindowName')
+    assert_true(AA_CONTENT:find("AA.isAAWindowOpen") ~= nil, 'Suite 67: mcac.lua defines AA.isAAWindowOpen')
+    assert_true(AA_CONTENT:find("AA.openAAWindow") ~= nil, 'Suite 67: mcac.lua defines AA.openAAWindow')
+    assert_true(AA_CONTENT:find("AA.closeAAWindow") ~= nil, 'Suite 67: mcac.lua defines AA.closeAAWindow')
+    assert_true(AA_CONTENT:find("TOGGLE_ALTADVWIN") ~= nil, 'Suite 67: mcac.lua uses TOGGLE_ALTADVWIN keypress')
+    assert_true(AA_CONTENT:find("IW_AltAdvBtn") ~= nil, 'Suite 67: mcac.lua notifies IW_AltAdvBtn')
+    assert_true(AA_CONTENT:find("AAW_ResetFilter") ~= nil, 'Suite 67: mcac.lua supports AAW_ResetFilter')
+    assert_true(AA_CONTENT:find("Failed to open AA Window after") ~= nil, 'Suite 67: mcac.lua aborts cleanly when window fails to open')
 end
 
 
@@ -7888,7 +7891,7 @@ do
         local cost = mockTloMe[name] and mockTloMe[name].Cost or 0
         local maxRank = mockTloMe[name] and mockTloMe[name].MaxRank or 0
 
-        -- Triune fallback: unpurchased AAs cost at least 1 point
+        -- MCAC fallback: unpurchased AAs cost at least 1 point
         if cost <= 0 then cost = 1 end
 
         local entry = {
@@ -7954,9 +7957,9 @@ do
     assert_true(cache['bloodlust'] ~= nil, 'Suite 68: Cache preserves unpurchased AA with id 0 and maxRank 0')
     assert_true(cache['mend'] == nil, 'Suite 68: Cache pruned true character skill Mend')
 
-    -- 3. Source code inspection of TAC/lua/triune/init.lua
-    local triuneContent = readFile('TAC/lua/triune/init.lua')
-    assert_true(AA_CONTENT:find("AA.GENERAL_AAS = {") ~= nil, 'Suite 68: triune.lua defines GENERAL_AAS catalog')
+    -- 3. Source code inspection of MCAC/lua/mcac/init.lua
+    local mcacContent = readFile('MCAC/lua/mcac/init.lua')
+    assert_true(AA_CONTENT:find("AA.GENERAL_AAS = {") ~= nil, 'Suite 68: mcac.lua defines GENERAL_AAS catalog')
     assert_true(AA_CONTENT:find("'Physical Enhancement'") ~= nil, 'Suite 68: NORRATH_AAS includes Physical Enhancement')
     assert_true(AA_CONTENT:find("'Bloodlust'") ~= nil, 'Suite 68: NORRATH_AAS includes Bloodlust')
     assert_true(AA_CONTENT:find("'Extended Ingenuity'") ~= nil, 'Suite 68: NORRATH_AAS includes Extended Ingenuity')
@@ -7965,11 +7968,11 @@ do
     assert_true(AA_CONTENT:find("'Gelid Rending'") ~= nil, 'Suite 68: NORRATH_AAS includes Gelid Rending')
 
     -- Ensure listboxes are NOT gated behind isAAWindowOpen()
-    assert_true(triuneContent:find("if runtime.isAAWindowOpen%(%) then%s+for _, lName in ipairs%(listNames%) do") == nil,
+    assert_true(mcacContent:find("if runtime.isAAWindowOpen%(%) then%s+for _, lName in ipairs%(listNames%) do") == nil,
         'Suite 68: UI listbox scan is not gated behind isAAWindowOpen()')
 
     -- Ensure id <= 0 is not prematurely dropping abilities
-    assert_true(triuneContent:find("if not isFromUI and id <= 0 then return end") == nil,
+    assert_true(mcacContent:find("if not isFromUI and id <= 0 then return end") == nil,
         'Suite 68: recordScannedAA does not drop non-UI abilities when id <= 0')
 
     -- 4. In-combat AA spending gating simulation
@@ -8040,11 +8043,11 @@ do
     assert(foundNestedList ~= nil, 'Suite 68: findChildRecursive navigates 3-level deep nested hierarchy')
     assert_eq(foundNestedList.Name(), 'AAW_GeneralList', 'Suite 68: found nested control matches AAW_GeneralList')
 
-    -- 6. Verify in-combat gate in triune.lua
+    -- 6. Verify in-combat gate in mcac.lua
     assert_true(AA_CONTENT:find("Strict out%-of%-combat enforcement: never spend AAs while engaged in combat") ~= nil,
-        'Suite 68: triune.lua includes strict out-of-combat gate in checkAutoSpendAA')
+        'Suite 68: mcac.lua includes strict out-of-combat gate in checkAutoSpendAA')
     assert_true(AA_CONTENT:find("Strict out%-of%-combat enforcement: if combat engages mid%-train") ~= nil,
-        'Suite 68: triune.lua includes mid-training combat abort in processAATrainWorkflow')
+        'Suite 68: mcac.lua includes mid-training combat abort in processAATrainWorkflow')
 end
 
 -- ============================================================================
@@ -8144,13 +8147,13 @@ do
     assert_eq(simPreCheckAA(65, 60, false), false, 'Suite 69: Pre-check rejects ability when canTrain is false')
     assert_eq(simPreCheckAA(65, 60, true), true, 'Suite 69: Pre-check accepts ability when level and prerequisites are met')
 
-    -- 6. Verify triune.lua source code definitions
-    local triuneContent = readFile('TAC/lua/triune/init.lua')
-    assert_true(AA_CONTENT:find("task%.step == 'click_train'") ~= nil, 'Suite 69: triune.lua implements click_train step in processAATrainWorkflow')
-    assert_true(AA_CONTENT:find("AAW_TrainButton") ~= nil, 'Suite 69: triune.lua clicks train button in UI')
-    assert_true(AA_CONTENT:find("targetTab = prefTab") ~= nil, 'Suite 69: triune.lua sets target tab based on ability type')
+    -- 6. Verify mcac.lua source code definitions
+    local mcacContent = readFile('MCAC/lua/mcac/init.lua')
+    assert_true(AA_CONTENT:find("task%.step == 'click_train'") ~= nil, 'Suite 69: mcac.lua implements click_train step in processAATrainWorkflow')
+    assert_true(AA_CONTENT:find("AAW_TrainButton") ~= nil, 'Suite 69: mcac.lua clicks train button in UI')
+    assert_true(AA_CONTENT:find("targetTab = prefTab") ~= nil, 'Suite 69: mcac.lua sets target tab based on ability type')
     assert_true(AA_CONTENT:find("ImGui%.TextColored%(GOOD%[1%], GOOD%[2%], GOOD%[3%], GOOD%[4%], 'Can Train'%)") ~= nil,
-        'Suite 69: triune.lua displays Can Train status for affordable abilities in UI')
+        'Suite 69: mcac.lua displays Can Train status for affordable abilities in UI')
 end
 
 -- ============================================================================
@@ -8188,7 +8191,7 @@ do
     do
         local origPrint = print
         print = function() end ---@diagnostic disable-line: lowercase-global
-        aaAllow.P = assert(loadfile('TAC/lua/tac/auto_aa.lua'))()
+        aaAllow.P = assert(loadfile('MCAC/lua/mcac/auto_aa.lua'))()
         local okInit, errInit = pcall(aaAllow.P.onInit, aaAllow.core)
         print = origPrint ---@diagnostic disable-line: lowercase-global
         assert_true(okInit, 'Suite 70: auto_aa plugin initialises on the mock core: ' .. tostring(errInit))
@@ -8259,14 +8262,14 @@ do
     assert_true(pollutedCache['harmtouch'] == nil, 'Suite 70: Cache PRUNES foreign Harm Touch for Warrior')
     assert_true(pollutedCache['divinearbitration'] == nil, 'Suite 70: Cache PRUNES foreign Divine Arbitration for Warrior')
 
-    -- 3. Source code inspection of TAC/lua/triune/init.lua
-    local triuneContent = readFile('TAC/lua/triune/init.lua')
-    assert_true(AA_CONTENT:find("AA.CLASS_ARCHETYPES = {") ~= nil, 'Suite 70: triune.lua defines CLASS_ARCHETYPES')
-    assert_true(AA_CONTENT:find("AA.ARCHETYPE_CLASSES = {") ~= nil, 'Suite 70: triune.lua defines ARCHETYPE_CLASSES')
-    assert_true(AA_CONTENT:find("AA.ARCHETYPE_RESTRICTIONS = {") ~= nil, 'Suite 70: triune.lua defines ARCHETYPE_RESTRICTIONS')
-    assert_true(AA_CONTENT:find("AA.CLASS_SPECIFIC_ABILITIES = {") ~= nil, 'Suite 70: triune.lua defines CLASS_SPECIFIC_ABILITIES')
-    assert_true(AA_CONTENT:find("AA.buildAAClassRestrictions") ~= nil, 'Suite 70: triune.lua defines buildAAClassRestrictions')
-    assert_true(AA_CONTENT:find("AA.isAAAllowedForPlayer") ~= nil, 'Suite 70: triune.lua defines isAAAllowedForPlayer')
+    -- 3. Source code inspection of MCAC/lua/mcac/init.lua
+    local mcacContent = readFile('MCAC/lua/mcac/init.lua')
+    assert_true(AA_CONTENT:find("AA.CLASS_ARCHETYPES = {") ~= nil, 'Suite 70: mcac.lua defines CLASS_ARCHETYPES')
+    assert_true(AA_CONTENT:find("AA.ARCHETYPE_CLASSES = {") ~= nil, 'Suite 70: mcac.lua defines ARCHETYPE_CLASSES')
+    assert_true(AA_CONTENT:find("AA.ARCHETYPE_RESTRICTIONS = {") ~= nil, 'Suite 70: mcac.lua defines ARCHETYPE_RESTRICTIONS')
+    assert_true(AA_CONTENT:find("AA.CLASS_SPECIFIC_ABILITIES = {") ~= nil, 'Suite 70: mcac.lua defines CLASS_SPECIFIC_ABILITIES')
+    assert_true(AA_CONTENT:find("AA.buildAAClassRestrictions") ~= nil, 'Suite 70: mcac.lua defines buildAAClassRestrictions')
+    assert_true(AA_CONTENT:find("AA.isAAAllowedForPlayer") ~= nil, 'Suite 70: mcac.lua defines isAAAllowedForPlayer')
     assert_true(AA_CONTENT:find("if not AA%.isAAAllowedForPlayer%(name, nil, isFromUI%) then%s+return") ~= nil,
         'Suite 70: recordScannedAA filters foreign class abilities')
     assert_true(AA_CONTENT:find("if isSkill or not AA%.isAAAllowedForPlayer%(cName, nil, false%) then") ~= nil,
@@ -8397,27 +8400,27 @@ do
     assert_true(aaTabTip:find('Rank: 1/3') ~= nil, 'Suite 71: AA tab tooltip has rank')
     assert_true(aaTabTip:find('Taunts the target') ~= nil, 'Suite 71: AA tab tooltip has wrapped description')
 
-    -- 4. Source code inspection of TAC/lua/triune/init.lua
-    local triuneContent = readFile('TAC/lua/triune/init.lua')
-    assert_true(triuneContent:find("function runtime.wrapText%(text, maxLineLen%)") ~= nil,
-        'Suite 71: triune.lua defines runtime.wrapText')
-    assert_true(triuneContent:find("function runtime.getAADescription%(itm%)") ~= nil,
-        'Suite 71: triune.lua defines runtime.getAADescription')
-    assert_true(triuneContent:find("function runtime.showAATooltip%(itm%)") ~= nil,
-        'Suite 71: triune.lua defines runtime.showAATooltip')
-    assert_true(triuneContent:find("function runtime.showAATabTooltip%(name, cls, secNum, tier%)") ~= nil,
-        'Suite 71: triune.lua defines runtime.showAATabTooltip')
-    assert_true(triuneContent:find("runtime.showAATabTooltip%(nm, cls, secNum, tier%)") ~= nil,
+    -- 4. Source code inspection of MCAC/lua/mcac/init.lua
+    local mcacContent = readFile('MCAC/lua/mcac/init.lua')
+    assert_true(mcacContent:find("function runtime.wrapText%(text, maxLineLen%)") ~= nil,
+        'Suite 71: mcac.lua defines runtime.wrapText')
+    assert_true(mcacContent:find("function runtime.getAADescription%(itm%)") ~= nil,
+        'Suite 71: mcac.lua defines runtime.getAADescription')
+    assert_true(mcacContent:find("function runtime.showAATooltip%(itm%)") ~= nil,
+        'Suite 71: mcac.lua defines runtime.showAATooltip')
+    assert_true(mcacContent:find("function runtime.showAATabTooltip%(name, cls, secNum, tier%)") ~= nil,
+        'Suite 71: mcac.lua defines runtime.showAATabTooltip')
+    assert_true(mcacContent:find("runtime.showAATabTooltip%(nm, cls, secNum, tier%)") ~= nil,
         'Suite 71: UI.drawAATab invokes runtime.showAATabTooltip on hover')
     assert_true(AA_CONTENT:find("description = cd.description") ~= nil,
         'Suite 71: recordScannedAA restores description from cache')
-    assert_true(triuneContent:find("if ma.Description then%s+local d = ma.Description%(%)") ~= nil,
+    assert_true(mcacContent:find("if ma.Description then%s+local d = ma.Description%(%)") ~= nil,
         'Suite 71: recordScannedAA extracts description from Me.AltAbility')
     assert_true(AA_CONTENT:find("if %(not description or description == ''%) and ga.Description then%s+local d = ga.Description%(%)") ~= nil,
         'Suite 71: recordScannedAA extracts description from AltAbility')
     assert_true(AA_CONTENT:find("description = description") ~= nil,
         'Suite 71: recordScannedAA populates description in entry and cache')
-    assert_true(triuneContent:find("runtime.showAATooltip%(itm%)") ~= nil,
+    assert_true(mcacContent:find("runtime.showAATooltip%(itm%)") ~= nil,
         'Suite 71: UI.drawAutoAATab displays runtime.showAATooltip on hover')
 end
 
@@ -8482,18 +8485,18 @@ do
     assert_eq(simCheckWatchdog(100.0, 105.0), false, 'Suite 72: Watchdog does not trigger before 10s')
     assert_true(simCheckWatchdog(100.0, 110.1), 'Suite 72: Watchdog triggers and clears task after 10s')
 
-    -- 6. Source code inspection of TAC/lua/triune/init.lua
-    local triuneContent = readFile('TAC/lua/triune/init.lua')
+    -- 6. Source code inspection of MCAC/lua/mcac/init.lua
+    local mcacContent = readFile('MCAC/lua/mcac/init.lua')
     assert_true(AA_CONTENT:find("AA%.pendingAATrain") ~= nil,
-        'Suite 72: triune.lua defines AA.pendingAATrain')
+        'Suite 72: mcac.lua defines AA.pendingAATrain')
     assert_true(AA_CONTENT:find("step = 'open'") ~= nil,
-        'Suite 72: triune.lua initializes step to open')
+        'Suite 72: mcac.lua initializes step to open')
     assert_true(AA_CONTENT:find("mq%.cmdf%('/nomodkey /notify %%s %%s leftmouseup', winName, listName%)") ~= nil,
-        'Suite 72: triune.lua sends leftmouseup to list row to activate Train button')
+        'Suite 72: mcac.lua sends leftmouseup to list row to activate Train button')
     assert_true(AA_CONTENT:find("not isSpecial and %(maxRank > 0 and rank >= maxRank%)") ~= nil,
-        'Suite 72: triune.lua prevents marking repeatable Special tab abilities as fully trained')
+        'Suite 72: mcac.lua prevents marking repeatable Special tab abilities as fully trained')
     assert_true(AA_CONTENT:find("Strict anti%-pause check: never spend AAs while casting or moving") ~= nil,
-        'Suite 72: triune.lua guards checkAutoSpendAA against casting and movement to eliminate pauses')
+        'Suite 72: mcac.lua guards checkAutoSpendAA against casting and movement to eliminate pauses')
 end
 
 -- ============================================================================
@@ -8534,20 +8537,20 @@ do
     assert_eq(canBuyBg, false, 'Suite 73: Background check without allowStop rejected while moving')
     assert_eq(didStopBg, false, 'Suite 73: Background check does not stop movement')
 
-    -- 2. Source code inspection of TAC/lua/triune/init.lua
-    local triuneContent = readFile('TAC/lua/triune/init.lua')
+    -- 2. Source code inspection of MCAC/lua/mcac/init.lua
+    local mcacContent = readFile('MCAC/lua/mcac/init.lua')
     assert_true(AA_CONTENT:find("function AA%.checkAutoSpendAA%(allowStop%)") ~= nil,
-        'Suite 73: triune.lua defines AA.checkAutoSpendAA(allowStop)')
+        'Suite 73: mcac.lua defines AA.checkAutoSpendAA(allowStop)')
     assert_true(AA_CONTENT:find("function AA%.startAATrainWorkflow%(targetName, allowStop%)") ~= nil,
-        'Suite 73: triune.lua defines AA.startAATrainWorkflow(targetName, allowStop)')
-    assert_true(triuneContent:find("Let plugins %(e%.g%. Auto AA purchases%) use the gap between pulls") ~= nil,
-        'Suite 73: triune.lua offers the gap between pulls to plugins')
-    assert_true(triuneContent:find("if runtime%.pluginManager%.onBetweenPulls%(%) then%s+stopMoving%(%)%s+return") ~= nil,
+        'Suite 73: mcac.lua defines AA.startAATrainWorkflow(targetName, allowStop)')
+    assert_true(mcacContent:find("Let plugins %(e%.g%. Auto AA purchases%) use the gap between pulls") ~= nil,
+        'Suite 73: mcac.lua offers the gap between pulls to plugins')
+    assert_true(mcacContent:find("if runtime%.pluginManager%.onBetweenPulls%(%) then%s+stopMoving%(%)%s+return") ~= nil,
         'Suite 73: puller yields when a plugin claims the between-pull gap')
     assert_true(AA_CONTENT:find("return AA%.checkAutoSpendAA%(true%) == true") ~= nil,
         'Suite 73: auto_aa.onBetweenPulls invokes checkAutoSpendAA(true)')
-    assert_true(triuneContent:find("if runtime%.combatHold%(%) then%s+stopMoving%(%)%s+return%s+end") ~= nil,
-        'Suite 73: triune.lua pauses pulling while a plugin holds combat')
+    assert_true(mcacContent:find("if runtime%.combatHold%(%) then%s+stopMoving%(%)%s+return%s+end") ~= nil,
+        'Suite 73: mcac.lua pauses pulling while a plugin holds combat')
     assert_true(AA_CONTENT:find("return AA%.pendingAATrain ~= nil") ~= nil,
         'Suite 73: auto_aa.wantsCombatHold reports an active purchase workflow')
 end
@@ -8669,20 +8672,20 @@ do
     assert_eq(nativePursuit.lastNavTargetId, 'native_spawn_77', 'Suite 74: native recovery tags lastNavTargetId')
 
     -- 4. Source inspections
-    local triuneContent = readFile('TAC/lua/triune/init.lua')
-    assert_true(triuneContent:find('function runtime%.isPlayerOffMesh') ~= nil,
-        'Suite 74: triune.lua defines isPlayerOffMesh')
-    assert_true(triuneContent:find('function runtime%.tryOffMeshRecovery') ~= nil,
-        'Suite 74: triune.lua defines tryOffMeshRecovery')
-    assert_true(triuneContent:find('sticking toward it to leave the mesh hole, then remapping') ~= nil,
-        'Suite 74: triune.lua logs off-mesh stick recovery')
-    assert_true(triuneContent:find('Remapped nav path to #%%d after off%-mesh stick recovery') ~= nil,
-        'Suite 74: triune.lua remaps /nav after PathExists returns')
-    assert_true(triuneContent:find('local playerOffMesh = runtime%.isPlayerOffMesh') ~= nil,
+    local mcacContent = readFile('MCAC/lua/mcac/init.lua')
+    assert_true(mcacContent:find('function runtime%.isPlayerOffMesh') ~= nil,
+        'Suite 74: mcac.lua defines isPlayerOffMesh')
+    assert_true(mcacContent:find('function runtime%.tryOffMeshRecovery') ~= nil,
+        'Suite 74: mcac.lua defines tryOffMeshRecovery')
+    assert_true(mcacContent:find('sticking toward it to leave the mesh hole, then remapping') ~= nil,
+        'Suite 74: mcac.lua logs off-mesh stick recovery')
+    assert_true(mcacContent:find('Remapped nav path to #%%d after off%-mesh stick recovery') ~= nil,
+        'Suite 74: mcac.lua remaps /nav after PathExists returns')
+    assert_true(mcacContent:find('local playerOffMesh = runtime%.isPlayerOffMesh') ~= nil,
         'Suite 74: findRoamTarget still picks NPCs when the player is off-mesh')
-    assert_true(triuneContent:find('and not playerOffMesh then') ~= nil,
+    assert_true(mcacContent:find('and not playerOffMesh then') ~= nil,
         'Suite 74: findRoamTarget skips PathExists filter while off-mesh')
-    assert_true(not triuneContent:find('noPathFails >= 3'),
+    assert_true(not mcacContent:find('noPathFails >= 3'),
         'Suite 74: 3-tick no-path abandon no longer drops the target before recovery')
 end
 
@@ -8691,11 +8694,11 @@ end
 -- ============================================================================
 do
     print('--- Suite 75: Popout Unit Frames HUD Window Logic & Configuration ---')
-    local triuneContent = readFile('TAC/lua/triune/init.lua')
+    local mcacContent = readFile('MCAC/lua/mcac/init.lua')
     local readmeContent = readFile('README.md')
 
     -- 1. Verify defaultCtrl defaults
-    local defCtrlFunc = loadFunc(triuneContent, 'defaultCtrl', { MODES = MODES })
+    local defCtrlFunc = loadFunc(mcacContent, 'defaultCtrl', { MODES = MODES })
     assert_true(defCtrlFunc ~= nil, 'Suite 75: defaultCtrl loads successfully')
     local testDc = defCtrlFunc()
     assert_eq(testDc.show_unit_frames, false, 'Suite 75: defaultCtrl.show_unit_frames is false')
@@ -8708,27 +8711,27 @@ do
     assert_eq(testDc.uf_buff_max, 30, 'Suite 75: defaultCtrl.uf_buff_max is 30')
     assert_eq(testDc.uf_target_buff_rows, 2, 'Suite 75: defaultCtrl.uf_target_buff_rows is 2')
 
-    assert_true(triuneContent:find('show_unit_frames%s*=%s*false') ~= nil,
+    assert_true(mcacContent:find('show_unit_frames%s*=%s*false') ~= nil,
         'Suite 75: defaultCtrl sets show_unit_frames to false')
-    assert_true(triuneContent:find('uf_lock%s*=%s*false') ~= nil,
+    assert_true(mcacContent:find('uf_lock%s*=%s*false') ~= nil,
         'Suite 75: defaultCtrl sets uf_lock to false')
-    assert_true(triuneContent:find('uf_alpha%s*=%s*0%.85') ~= nil,
+    assert_true(mcacContent:find('uf_alpha%s*=%s*0%.85') ~= nil,
         'Suite 75: defaultCtrl sets uf_alpha to 0.85')
-    assert_true(triuneContent:find('uf_bar_height%s*=%s*14') ~= nil,
+    assert_true(mcacContent:find('uf_bar_height%s*=%s*14') ~= nil,
         'Suite 75: defaultCtrl sets uf_bar_height to 14')
-    assert_true(triuneContent:find('uf_show_endurance%s*=%s*true') ~= nil,
+    assert_true(mcacContent:find('uf_show_endurance%s*=%s*true') ~= nil,
         'Suite 75: defaultCtrl sets uf_show_endurance to true')
-    assert_true(triuneContent:find('uf_show_xp%s*=%s*true') ~= nil,
+    assert_true(mcacContent:find('uf_show_xp%s*=%s*true') ~= nil,
         'Suite 75: defaultCtrl sets uf_show_xp to true')
-    assert_true(triuneContent:find('uf_hide_empty_pets%s*=%s*true') ~= nil,
+    assert_true(mcacContent:find('uf_hide_empty_pets%s*=%s*true') ~= nil,
         'Suite 75: defaultCtrl sets uf_hide_empty_pets to true')
-    assert_true(triuneContent:find('uf_buff_max%s*=%s*30') ~= nil,
+    assert_true(mcacContent:find('uf_buff_max%s*=%s*30') ~= nil,
         'Suite 75: defaultCtrl sets uf_buff_max to 30')
-    assert_true(triuneContent:find('uf_target_buff_rows%s*=%s*2') ~= nil,
+    assert_true(mcacContent:find('uf_target_buff_rows%s*=%s*2') ~= nil,
         'Suite 75: defaultCtrl sets uf_target_buff_rows to 2')
 
     -- 2. Verify window definition and autonomous plugin architecture
-    local fUf = assert(io.open('TAC/lua/tac/hud_unitframes.lua', 'r'))
+    local fUf = assert(io.open('MCAC/lua/mcac/hud_unitframes.lua', 'r'))
     local ufContent = fUf:read('*all')
     assert_true(ufContent:find("ImGui.BeginChild(boxId or '##ufTargetBox'", 1, true) ~= nil,
         'Suite 75: target section is drawn inside a fixed-height child box')
@@ -8739,20 +8742,20 @@ do
         'Suite 75: hud_unitframes declares the Target popout as an extra window')
     assert_true(ufContent:find("drawTargetSection(core.px(ctrl.tw_bar_height or 22), ctrl.tw_buff_rows or 2, '##twTargetBox'", 1, true) ~= nil,
         'Suite 75: the Target popout draws the shared target section with its own bar height and rows')
-    assert_true(ufContent:find("###triuneTargetWindow", 1, true) ~= nil,
+    assert_true(ufContent:find("###mcacTargetWindow", 1, true) ~= nil,
         'Suite 75: the Target popout has its own ImGui window id')
     assert_true(ufContent:find("core.preBeginWindow('target_window')", 1, true) ~= nil and ufContent:find("core.preEndWindow('target_window', true)", 1, true) ~= nil,
         'Suite 75: the Target popout is wired to the core window hooks under its own layout key')
     assert_true(ufContent:find("if not ctrl.show_unit_frames and not ctrl.show_target_window then", 1, true) ~= nil,
         'Suite 75: the snapshot stays warm while either window is open')
-    assert_true(triuneContent:find("'WindowBg', 'ChildBg',", 1, true) ~= nil,
+    assert_true(mcacContent:find("'WindowBg', 'ChildBg',", 1, true) ~= nil,
         'Suite 75: the ghost fade includes ChildBg so the fixed target box fades with the window')
-    local mapSrc = readFile('TAC/lua/tac/map.lua')
+    local mapSrc = readFile('MCAC/lua/mcac/map.lua')
     assert_true(mapSrc:find("core.windowBgAlpha('map', 1.0)", 1, true) ~= nil and mapSrc:find("GetColorU32(0.035, 0.050, 0.075, ghostA)", 1, true) ~= nil,
         'Suite 75: the map canvas fill follows the window ghost alpha')
     assert_true(mapSrc:find("ImGui.PushStyleColor(ImGuiCol.ChildBg, 0.04, 0.07, 0.12, 0.90 * ghostA)", 1, true) ~= nil,
         'Suite 75: the map on-canvas panels fade with the window')
-    assert_true(triuneContent:find("cmd == 'target' or cmd == 'tw'", 1, true) ~= nil,
+    assert_true(mcacContent:find("cmd == 'target' or cmd == 'tw'", 1, true) ~= nil,
         'Suite 75: /ac target toggles the Target popout')
     assert_eq(testDc.show_target_window, false, 'Suite 75: defaultCtrl.show_target_window is false')
     assert_eq(testDc.tw_bar_height, 22, 'Suite 75: defaultCtrl.tw_bar_height is 22')
@@ -8789,35 +8792,35 @@ do
         'Suite 75: the pet sweep is capped')
     fUf:close()
 
-    assert_true(triuneContent:find("TriunePluginsUI") ~= nil,
-        'Suite 75: TriunePluginsUI is registered with mq.imgui.init')
-    assert_true(triuneContent:find('function UI%.drawPlugins') ~= nil,
-        'Suite 75: UI.drawPlugins is defined in triune.lua')
+    assert_true(mcacContent:find("MCACPluginsUI") ~= nil,
+        'Suite 75: MCACPluginsUI is registered with mq.imgui.init')
+    assert_true(mcacContent:find('function UI%.drawPlugins') ~= nil,
+        'Suite 75: UI.drawPlugins is defined in mcac.lua')
     assert_true(ufContent:find("id%s*=%s*'hud_unitframes'") ~= nil,
         'Suite 75: hud_unitframes plugin has id hud_unitframes')
     assert_true(ufContent:find('function plugin%.onDrawUI') ~= nil,
         'Suite 75: hud_unitframes defines onDrawUI render hook')
     assert_true(ufContent:find('function plugin%.onTick') ~= nil,
         'Suite 75: hud_unitframes defines onTick fiber hook')
-    assert_true(triuneContent:find('function UI%.resolveTargetOfTarget') ~= nil,
-        'Suite 75: UI.resolveTargetOfTarget is defined in triune.lua')
-    assert_true(triuneContent:find('resolveTargetOfTarget%s*=') ~= nil,
+    assert_true(mcacContent:find('function UI%.resolveTargetOfTarget') ~= nil,
+        'Suite 75: UI.resolveTargetOfTarget is defined in mcac.lua')
+    assert_true(mcacContent:find('resolveTargetOfTarget%s*=') ~= nil,
         'Suite 75: UI.resolveTargetOfTarget is exported to plugins via pm.getCoreApi()')
 
     -- 3. Verify slash command and toolbar buttons
-    assert_true(triuneContent:find("cmd == 'hud' or cmd == 'uf'") ~= nil,
+    assert_true(mcacContent:find("cmd == 'hud' or cmd == 'uf'") ~= nil,
         'Suite 75: /ac hud and /ac uf slash commands are registered')
-    assert_true(readFile('TAC/lua/tac/hud_unitframes.lua'):find("label = 'Target & Player HUD'", 1, true) ~= nil,
+    assert_true(readFile('MCAC/lua/mcac/hud_unitframes.lua'):find("label = 'Target & Player HUD'", 1, true) ~= nil,
         'Suite 75: hud_unitframes declares its header window button (drawn by pm.drawHeaderButtons)')
-    assert_true(triuneContent:find("HUD##miniHud") == nil and triuneContent:find("pcall(pm.drawHeaderButtons, 0)", 1, true) ~= nil,
+    assert_true(mcacContent:find("HUD##miniHud") == nil and mcacContent:find("pcall(pm.drawHeaderButtons, 0)", 1, true) ~= nil,
         'Suite 75: Mini GUI HUD button comes from pm.drawHeaderButtons, not a hardcoded button')
 
     -- 4. Verify version consistency
-    local vTriune = triuneContent:match("local VERSION%s*=%s*'(.-)'")
+    local vMcac = mcacContent:match("local VERSION%s*=%s*'(.-)'")
     local vReadme = readmeContent:match("Current version:%s*%*%*(.-)%*%*")
-    assert_true(vTriune ~= nil and #vTriune > 0, 'Suite 75: triune.lua has valid VERSION')
+    assert_true(vMcac ~= nil and #vMcac > 0, 'Suite 75: mcac.lua has valid VERSION')
     assert_true(vReadme ~= nil and #vReadme > 0, 'Suite 75: README.md has valid version')
-    assert_eq(vTriune, vReadme, 'Suite 75: Version numbers match across triune.lua and README.md')
+    assert_eq(vMcac, vReadme, 'Suite 75: Version numbers match across mcac.lua and README.md')
 end
 
 -- ============================================================================
@@ -8825,11 +8828,11 @@ end
 -- ============================================================================
 do
     print('--- Suite 76: Popout Group Window Logic & Configuration ---')
-    local triuneContent = readFile('TAC/lua/triune/init.lua')
+    local mcacContent = readFile('MCAC/lua/mcac/init.lua')
     local readmeContent = readFile('README.md')
 
     -- 1. Verify defaultCtrl defaults
-    local defCtrlFunc = loadFunc(triuneContent, 'defaultCtrl', { MODES = MODES })
+    local defCtrlFunc = loadFunc(mcacContent, 'defaultCtrl', { MODES = MODES })
     assert_true(defCtrlFunc ~= nil, 'Suite 76: defaultCtrl loads successfully')
     local testDc = defCtrlFunc()
     assert_eq(testDc.show_group_window, false, 'Suite 76: defaultCtrl.show_group_window is false')
@@ -8842,32 +8845,32 @@ do
     assert_eq(testDc.gw_show_pets, true, 'Suite 76: defaultCtrl.gw_show_pets is true')
     assert_eq(testDc.gw_show_roles, true, 'Suite 76: defaultCtrl.gw_show_roles is true')
 
-    assert_true(triuneContent:find('show_group_window%s*=%s*false') ~= nil,
+    assert_true(mcacContent:find('show_group_window%s*=%s*false') ~= nil,
         'Suite 76: defaultCtrl sets show_group_window to false')
-    assert_true(triuneContent:find('gw_lock%s*=%s*false') ~= nil,
+    assert_true(mcacContent:find('gw_lock%s*=%s*false') ~= nil,
         'Suite 76: defaultCtrl sets gw_lock to false')
-    assert_true(triuneContent:find('gw_alpha%s*=%s*0%.85') ~= nil,
+    assert_true(mcacContent:find('gw_alpha%s*=%s*0%.85') ~= nil,
         'Suite 76: defaultCtrl sets gw_alpha to 0.85')
-    assert_true(triuneContent:find('gw_bar_height%s*=%s*14') ~= nil,
+    assert_true(mcacContent:find('gw_bar_height%s*=%s*14') ~= nil,
         'Suite 76: defaultCtrl sets gw_bar_height to 14')
-    assert_true(triuneContent:find('gw_include_self%s*=%s*true') ~= nil,
+    assert_true(mcacContent:find('gw_include_self%s*=%s*true') ~= nil,
         'Suite 76: defaultCtrl sets gw_include_self to true')
-    assert_true(triuneContent:find('gw_show_mana%s*=%s*true') ~= nil,
+    assert_true(mcacContent:find('gw_show_mana%s*=%s*true') ~= nil,
         'Suite 76: defaultCtrl sets gw_show_mana to true')
-    assert_true(triuneContent:find('gw_show_endurance%s*=%s*false') ~= nil,
+    assert_true(mcacContent:find('gw_show_endurance%s*=%s*false') ~= nil,
         'Suite 76: defaultCtrl sets gw_show_endurance to false')
-    assert_true(triuneContent:find('gw_show_pets%s*=%s*true') ~= nil,
+    assert_true(mcacContent:find('gw_show_pets%s*=%s*true') ~= nil,
         'Suite 76: defaultCtrl sets gw_show_pets to true')
-    assert_true(triuneContent:find('gw_show_roles%s*=%s*true') ~= nil,
+    assert_true(mcacContent:find('gw_show_roles%s*=%s*true') ~= nil,
         'Suite 76: defaultCtrl sets gw_show_roles to true')
 
     -- 2. Verify the window now lives in the hud_group plugin (render-only, no fiber)
-    local gwContent = readFile('TAC/lua/tac/hud_group.lua')
-    assert_true(triuneContent:find('function UI%.drawGroupWindow') == nil,
-        'Suite 76: UI.drawGroupWindow was removed from triune.lua')
-    assert_true(triuneContent:find("mq%.imgui%.init%('TriuneGroupWindow'") == nil,
-        'Suite 76: TriuneGroupWindow imgui registration was removed from triune.lua')
-    local gwPlugin = assert(loadfile('TAC/lua/tac/hud_group.lua'))()
+    local gwContent = readFile('MCAC/lua/mcac/hud_group.lua')
+    assert_true(mcacContent:find('function UI%.drawGroupWindow') == nil,
+        'Suite 76: UI.drawGroupWindow was removed from mcac.lua')
+    assert_true(mcacContent:find("mq%.imgui%.init%('MCACGroupWindow'") == nil,
+        'Suite 76: MCACGroupWindow imgui registration was removed from mcac.lua')
+    local gwPlugin = assert(loadfile('MCAC/lua/mcac/hud_group.lua'))()
     assert_eq(gwPlugin.id, 'hud_group', 'Suite 76: hud_group plugin id')
     assert_eq(gwPlugin.hasThread, false, 'Suite 76: hud_group is render-only (no fiber)')
     assert_eq(gwPlugin.runOutOfCombatOnly, false, 'Suite 76: hud_group keeps rendering in combat')
@@ -8877,11 +8880,11 @@ do
         'Suite 76: hud_group visibility is driven by ctrl.show_group_window')
 
     -- 3. Verify slash command and toolbar buttons
-    assert_true(triuneContent:find("cmd == 'group' or cmd == 'gw'") ~= nil,
+    assert_true(mcacContent:find("cmd == 'group' or cmd == 'gw'") ~= nil,
         'Suite 76: /ac group and /ac gw slash commands are registered')
-    assert_true(readFile('TAC/lua/tac/hud_group.lua'):find("flag = 'show_group_window'", 1, true) ~= nil,
+    assert_true(readFile('MCAC/lua/mcac/hud_group.lua'):find("flag = 'show_group_window'", 1, true) ~= nil,
         'Suite 76: hud_group declares its header window button (drawn by pm.drawHeaderButtons)')
-    assert_true(triuneContent:find("Grp##miniGroup") == nil and triuneContent:find("pcall(pm.drawHeaderButtons, 0)", 1, true) ~= nil,
+    assert_true(mcacContent:find("Grp##miniGroup") == nil and mcacContent:find("pcall(pm.drawHeaderButtons, 0)", 1, true) ~= nil,
         'Suite 76: Mini GUI Grp button comes from pm.drawHeaderButtons, not a hardcoded button')
 
     -- 4. Verify context menu and target clicks
@@ -8918,60 +8921,60 @@ end
 -- ============================================================================
 do
     print('--- Suite 77: Popout Effects & Songs Window Logic & Configuration ---')
-    local fTriune = assert(io.open('TAC/lua/triune/init.lua', 'r'))
-    local triuneContent = fTriune:read('*all')
-    fTriune:close()
+    local fMcac = assert(io.open('MCAC/lua/mcac/init.lua', 'r'))
+    local mcacContent = fMcac:read('*all')
+    fMcac:close()
 
     local fReadme = assert(io.open('README.md', 'r'))
     local readmeContent = fReadme:read('*all')
     fReadme:close()
 
     -- 1. Verify defaultCtrl defaults
-    assert_true(triuneContent:find('show_effects_window%s*=%s*false') ~= nil,
+    assert_true(mcacContent:find('show_effects_window%s*=%s*false') ~= nil,
         'Suite 77: defaultCtrl sets show_effects_window to false')
-    assert_true(triuneContent:find('eff_lock%s*=%s*false') ~= nil,
+    assert_true(mcacContent:find('eff_lock%s*=%s*false') ~= nil,
         'Suite 77: defaultCtrl sets eff_lock to false')
-    assert_true(triuneContent:find('eff_alpha%s*=%s*0%.85') ~= nil,
+    assert_true(mcacContent:find('eff_alpha%s*=%s*0%.85') ~= nil,
         'Suite 77: defaultCtrl sets eff_alpha to 0.85')
-    assert_true(triuneContent:find('eff_bar_height%s*=%s*18') ~= nil,
+    assert_true(mcacContent:find('eff_bar_height%s*=%s*18') ~= nil,
         'Suite 77: defaultCtrl sets eff_bar_height to 18')
-    assert_true(triuneContent:find("eff_sort_by%s*=%s*'Time Left %(Ascending%)'") ~= nil,
+    assert_true(mcacContent:find("eff_sort_by%s*=%s*'Time Left %(Ascending%)'") ~= nil,
         'Suite 77: defaultCtrl sets eff_sort_by to Time Left (Ascending)')
-    assert_true(triuneContent:find('eff_show_buffs%s*=%s*true') ~= nil,
+    assert_true(mcacContent:find('eff_show_buffs%s*=%s*true') ~= nil,
         'Suite 77: defaultCtrl sets eff_show_buffs to true')
-    assert_true(triuneContent:find('eff_show_songs%s*=%s*true') ~= nil,
+    assert_true(mcacContent:find('eff_show_songs%s*=%s*true') ~= nil,
         'Suite 77: defaultCtrl sets eff_show_songs to true')
-    assert_true(triuneContent:find('eff_show_detrimental%s*=%s*true') ~= nil,
+    assert_true(mcacContent:find('eff_show_detrimental%s*=%s*true') ~= nil,
         'Suite 77: defaultCtrl sets eff_show_detrimental to true')
 
     -- 2. Verify the window now lives in the hud_effects plugin (render-only, no fiber)
-    local effContent = readFile('TAC/lua/tac/hud_effects.lua')
-    assert_true(triuneContent:find('function UI%.drawEffectsWindow') == nil,
-        'Suite 77: UI.drawEffectsWindow was removed from triune.lua')
-    assert_true(triuneContent:find("mq%.imgui%.init%('TriuneEffectsWindow'") == nil,
-        'Suite 77: TriuneEffectsWindow imgui registration was removed from triune.lua')
-    local effPlugin = assert(loadfile('TAC/lua/tac/hud_effects.lua'))()
+    local effContent = readFile('MCAC/lua/mcac/hud_effects.lua')
+    assert_true(mcacContent:find('function UI%.drawEffectsWindow') == nil,
+        'Suite 77: UI.drawEffectsWindow was removed from mcac.lua')
+    assert_true(mcacContent:find("mq%.imgui%.init%('MCACEffectsWindow'") == nil,
+        'Suite 77: MCACEffectsWindow imgui registration was removed from mcac.lua')
+    local effPlugin = assert(loadfile('MCAC/lua/mcac/hud_effects.lua'))()
     assert_eq(effPlugin.id, 'hud_effects', 'Suite 77: hud_effects plugin id')
     assert_eq(effPlugin.hasThread, false, 'Suite 77: hud_effects is render-only (no fiber)')
     assert_type(effPlugin.onDrawUI, 'function', 'Suite 77: hud_effects defines onDrawUI')
     assert_true(effContent:find('core%.parseDurationSec') ~= nil and effContent:find('core%.drawSpellIcon') ~= nil,
         'Suite 77: hud_effects uses parseDurationSec/drawSpellIcon through the plugin API')
-    assert_true(triuneContent:find('parseDurationSec%s*=%s*parseDurationSec') ~= nil
-        and triuneContent:find('drawSpellIcon%s*=%s*UI%.drawSpellIcon') ~= nil,
+    assert_true(mcacContent:find('parseDurationSec%s*=%s*parseDurationSec') ~= nil
+        and mcacContent:find('drawSpellIcon%s*=%s*UI%.drawSpellIcon') ~= nil,
         'Suite 77: pm.getCoreApi exports parseDurationSec and drawSpellIcon')
 
     -- 3. Verify spell icon helpers
-    assert_true(triuneContent:find('function UI%.drawSpellIcon') ~= nil,
-        'Suite 77: UI.drawSpellIcon is defined in triune.lua')
-    assert_true(triuneContent:find('function UI%.getSpellIconAnimation') ~= nil,
-        'Suite 77: UI.getSpellIconAnimation is defined in triune.lua')
+    assert_true(mcacContent:find('function UI%.drawSpellIcon') ~= nil,
+        'Suite 77: UI.drawSpellIcon is defined in mcac.lua')
+    assert_true(mcacContent:find('function UI%.getSpellIconAnimation') ~= nil,
+        'Suite 77: UI.getSpellIconAnimation is defined in mcac.lua')
 
     -- 4. Verify slash command and toolbar buttons
-    assert_true(triuneContent:find("cmd == 'eff' or cmd == 'effects'") ~= nil,
+    assert_true(mcacContent:find("cmd == 'eff' or cmd == 'effects'") ~= nil,
         'Suite 77: /ac eff and /ac effects slash commands are registered')
-    assert_true(readFile('TAC/lua/tac/hud_effects.lua'):find("flag = 'show_effects_window'", 1, true) ~= nil,
+    assert_true(readFile('MCAC/lua/mcac/hud_effects.lua'):find("flag = 'show_effects_window'", 1, true) ~= nil,
         'Suite 77: hud_effects declares its header window button (drawn by pm.drawHeaderButtons)')
-    assert_true(triuneContent:find("Buffs##miniEffects") == nil and triuneContent:find("pcall(pm.drawHeaderButtons, 0)", 1, true) ~= nil,
+    assert_true(mcacContent:find("Buffs##miniEffects") == nil and mcacContent:find("pcall(pm.drawHeaderButtons, 0)", 1, true) ~= nil,
         'Suite 77: Mini GUI Buffs button comes from pm.drawHeaderButtons, not a hardcoded button')
 
     -- 5. Verify context menus and actions
@@ -9005,10 +9008,10 @@ do
     -- 6c. The real parseDurationSec against MQ-style userdata (members and
     -- the call both go through metamethods, so type() is 'userdata' as in game)
     do
-        local a = triuneContent:find('local function tloTotalSeconds', 1, true)
-        local b = triuneContent:find('local function parseCombatAbilityTimer', 1, true)
-        assert_true(a ~= nil and b ~= nil and a < b, 'Suite 77: tloTotalSeconds / parseDurationSec found in triune.lua')
-        local realParse = assert(loadstring(triuneContent:sub(a, b - 1) .. '\nreturn parseDurationSec'))()
+        local a = mcacContent:find('local function tloTotalSeconds', 1, true)
+        local b = mcacContent:find('local function parseCombatAbilityTimer', 1, true)
+        assert_true(a ~= nil and b ~= nil and a < b, 'Suite 77: tloTotalSeconds / parseDurationSec found in mcac.lua')
+        local realParse = assert(loadstring(mcacContent:sub(a, b - 1) .. '\nreturn parseDurationSec'))()
         local function tlo(members, value)
             local u = newproxy(true)
             local mt = getmetatable(u)
@@ -9037,8 +9040,8 @@ do
         { name = 'Boil Blood', duration = 45, isSong = false, isBeneficial = false },
     }
 
-    -- The real sortEffects from tac/hud_effects.lua
-    local sortEffects = loadFunc(readFile('TAC/lua/tac/hud_effects.lua'), 'sortEffects')
+    -- The real sortEffects from mcac/hud_effects.lua
+    local sortEffects = loadFunc(readFile('MCAC/lua/mcac/hud_effects.lua'), 'sortEffects')
 
     -- Test Time Left (Ascending): 18s -> 45s -> 300s -> Aura (0s)
     local asc = { testList[1], testList[2], testList[3], testList[4] }
@@ -9070,11 +9073,11 @@ do
     assert_eq(fmtSec(5400), '1h 30m', 'Suite 77: 90min effect formats as 1h 30m')
 
     -- 9. Verify version sync
-    local vTriune = triuneContent:match("local VERSION%s*=%s*'(.-)'")
+    local vMcac = mcacContent:match("local VERSION%s*=%s*'(.-)'")
     local vReadme = readmeContent:match("Current version:%s*%*%*(.-)%*%*")
-    assert_eq(vTriune, '3.4', 'Suite 77: triune.lua VERSION is 3.4')
-    assert_eq(vReadme, '3.4', 'Suite 77: README.md version is 3.4')
-    assert_eq(vTriune, vReadme, 'Suite 77: Version numbers match across triune.lua and README.md')
+    assert_eq(vMcac, '3.51', 'Suite 77: mcac.lua VERSION is 3.51')
+    assert_eq(vReadme, '3.51', 'Suite 77: README.md version is 3.51')
+    assert_eq(vMcac, vReadme, 'Suite 77: Version numbers match across mcac.lua and README.md')
 end
 
 -- ============================================================================
@@ -9082,54 +9085,54 @@ end
 -- ============================================================================
 print('--- Suite 78: Popout Extended Target (XTarget) Window Logic & Configuration ---')
 do
-    local fTriune = assert(io.open('TAC/lua/triune/init.lua', 'r'))
-    local triuneContent = fTriune:read('*all')
-    fTriune:close()
+    local fMcac = assert(io.open('MCAC/lua/mcac/init.lua', 'r'))
+    local mcacContent = fMcac:read('*all')
+    fMcac:close()
 
     local fReadme = assert(io.open('README.md', 'r'))
     local readmeContent = fReadme:read('*all')
     fReadme:close()
 
     -- 1. Verify defaultCtrl contains xtarget fields
-    assert_true(triuneContent:find('show_xtarget_window%s*=%s*false') ~= nil,
+    assert_true(mcacContent:find('show_xtarget_window%s*=%s*false') ~= nil,
         'Suite 78: defaultCtrl.show_xtarget_window default is false')
-    assert_true(triuneContent:find('xt_lock%s*=%s*false') ~= nil,
+    assert_true(mcacContent:find('xt_lock%s*=%s*false') ~= nil,
         'Suite 78: defaultCtrl.xt_lock default is false')
-    assert_true(triuneContent:find('xt_alpha%s*=%s*0.85') ~= nil,
+    assert_true(mcacContent:find('xt_alpha%s*=%s*0.85') ~= nil,
         'Suite 78: defaultCtrl.xt_alpha default is 0.85')
-    assert_true(triuneContent:find('xt_bar_height%s*=%s*16') ~= nil,
+    assert_true(mcacContent:find('xt_bar_height%s*=%s*16') ~= nil,
         'Suite 78: defaultCtrl.xt_bar_height default is 16')
-    assert_true(triuneContent:find('xt_show_empty%s*=%s*false') ~= nil,
+    assert_true(mcacContent:find('xt_show_empty%s*=%s*false') ~= nil,
         'Suite 78: defaultCtrl.xt_show_empty default is false')
-    assert_true(triuneContent:find('xt_show_tot%s*=%s*true') ~= nil,
+    assert_true(mcacContent:find('xt_show_tot%s*=%s*true') ~= nil,
         'Suite 78: defaultCtrl.xt_show_tot default is true')
-    assert_true(triuneContent:find('xt_show_aggro%s*=%s*true') ~= nil,
+    assert_true(mcacContent:find('xt_show_aggro%s*=%s*true') ~= nil,
         'Suite 78: defaultCtrl.xt_show_aggro default is true')
-    assert_true(triuneContent:find('xt_show_dist%s*=%s*true') ~= nil,
+    assert_true(mcacContent:find('xt_show_dist%s*=%s*true') ~= nil,
         'Suite 78: defaultCtrl.xt_show_dist default is true')
 
     -- 2. Verify the window now lives in the hud_xtarget plugin (render-only, no fiber)
-    local xtContent = readFile('TAC/lua/tac/hud_xtarget.lua')
-    assert_true(triuneContent:find("mq%.imgui%.init%('TriuneXTargetWindow'") == nil,
-        'Suite 78: TriuneXTargetWindow imgui registration was removed from triune.lua')
-    assert_true(triuneContent:find('function UI%.drawXTargetWindow%(%)') == nil,
-        'Suite 78: UI.drawXTargetWindow was removed from triune.lua')
-    local xtPlugin = assert(loadfile('TAC/lua/tac/hud_xtarget.lua'))()
+    local xtContent = readFile('MCAC/lua/mcac/hud_xtarget.lua')
+    assert_true(mcacContent:find("mq%.imgui%.init%('MCACXTargetWindow'") == nil,
+        'Suite 78: MCACXTargetWindow imgui registration was removed from mcac.lua')
+    assert_true(mcacContent:find('function UI%.drawXTargetWindow%(%)') == nil,
+        'Suite 78: UI.drawXTargetWindow was removed from mcac.lua')
+    local xtPlugin = assert(loadfile('MCAC/lua/mcac/hud_xtarget.lua'))()
     assert_eq(xtPlugin.id, 'hud_xtarget', 'Suite 78: hud_xtarget plugin id')
     assert_eq(xtPlugin.hasThread, false, 'Suite 78: hud_xtarget is render-only (no fiber)')
     assert_type(xtPlugin.onDrawUI, 'function', 'Suite 78: hud_xtarget defines onDrawUI')
-    assert_true(xtContent:find('core%.addIgnore') ~= nil and triuneContent:find('addIgnore%s*=%s*runtime%.addIgnore') ~= nil,
+    assert_true(xtContent:find('core%.addIgnore') ~= nil and mcacContent:find('addIgnore%s*=%s*runtime%.addIgnore') ~= nil,
         'Suite 78: hud_xtarget reaches the ignore list through the exported core API')
     -- Per-row Force / Ignore toggles go through the exported core API too
     for _, fn in ipairs({ 'setXtForce', 'setXtIgnore', 'isXtIgnoredId', 'getXtForceId' }) do
         assert_true(xtContent:find('core%.' .. fn) ~= nil, 'Suite 78: hud_xtarget uses core.' .. fn)
-        assert_true(triuneContent:find('%f[%w_]' .. fn .. '%s*=') ~= nil, 'Suite 78: core API exports ' .. fn)
+        assert_true(mcacContent:find('%f[%w_]' .. fn .. '%s*=') ~= nil, 'Suite 78: core API exports ' .. fn)
     end
     assert_true(xtContent:find("'F##xtForce_'", 1, true) ~= nil and xtContent:find("'I##xtIgnore_'", 1, true) ~= nil,
         'Suite 78: each XTarget row draws Force and Ignore toggle buttons')
-    assert_true(triuneContent:find('local forceId = runtime.forcedTargetId()', 1, true) ~= nil,
+    assert_true(mcacContent:find('local forceId = runtime.forcedTargetId()', 1, true) ~= nil,
         'Suite 78: combatTick applies the forced XTarget ahead of mode selection')
-    assert_true(triuneContent:find('if runtime.forcedTargetId() then return false end', 1, true) ~= nil,
+    assert_true(mcacContent:find('if runtime.forcedTargetId() then return false end', 1, true) ~= nil,
         'Suite 78: checkAggroSwitch never switches away from a forced XTarget')
 
     -- Pet / friendly-PC slots are hidden by default (they are not hostiles)
@@ -9162,17 +9165,17 @@ do
     end
 
     -- 3. Verify two-line header toolbar and compact button height
-    assert_true(triuneContent:find("ImGuiStyleVar%.FramePadding,%s*5,%s*2") ~= nil,
+    assert_true(mcacContent:find("ImGuiStyleVar%.FramePadding,%s*5,%s*2") ~= nil,
         'Suite 78: Header toolbar buttons have compact FramePadding (5, 2)')
-    assert_true(triuneContent:find("pcall(pm.drawHeaderButtons, 1)", 1, true) ~= nil,
+    assert_true(mcacContent:find("pcall(pm.drawHeaderButtons, 1)", 1, true) ~= nil,
         'Suite 78: Toolbar draws plugin window buttons through the plugin manager')
-    assert_true(readFile('TAC/lua/tac/hud_xtarget.lua'):find("flag = 'show_xtarget_window'", 1, true) ~= nil,
+    assert_true(readFile('MCAC/lua/mcac/hud_xtarget.lua'):find("flag = 'show_xtarget_window'", 1, true) ~= nil,
         'Suite 78: hud_xtarget declares its header window button (drawn by pm.drawHeaderButtons)')
-    assert_true(triuneContent:find("XT##miniXTarget") == nil and triuneContent:find("pcall(pm.drawHeaderButtons, 0)", 1, true) ~= nil,
+    assert_true(mcacContent:find("XT##miniXTarget") == nil and mcacContent:find("pcall(pm.drawHeaderButtons, 0)", 1, true) ~= nil,
         'Suite 78: Mini GUI XT button comes from pm.drawHeaderButtons, not a hardcoded button')
 
     -- 4. Verify slash command handler
-    assert_true(triuneContent:find("cmd == 'xtar' or cmd == 'xt' or cmd == 'xtarget'") ~= nil,
+    assert_true(mcacContent:find("cmd == 'xtar' or cmd == 'xt' or cmd == 'xtarget'") ~= nil,
         'Suite 78: /ac xtar, /ac xt, and /ac xtarget slash commands are registered')
 
     -- 5. Verify window context menus and actions
@@ -9186,11 +9189,11 @@ do
         'Suite 78: Supports Face Target action')
 
     -- 6. Verify version sync
-    local vTriune = triuneContent:match("local VERSION%s*=%s*'(.-)'")
+    local vMcac = mcacContent:match("local VERSION%s*=%s*'(.-)'")
     local vReadme = readmeContent:match("Current version:%s*%*%*(.-)%*%*")
-    assert_eq(vTriune, '3.4', 'Suite 78: triune.lua VERSION is 3.4')
-    assert_eq(vReadme, '3.4', 'Suite 78: README.md version is 3.4')
-    assert_eq(vTriune, vReadme, 'Suite 78: Version numbers match across triune.lua and README.md')
+    assert_eq(vMcac, '3.51', 'Suite 78: mcac.lua VERSION is 3.51')
+    assert_eq(vReadme, '3.51', 'Suite 78: README.md version is 3.51')
+    assert_eq(vMcac, vReadme, 'Suite 78: Version numbers match across mcac.lua and README.md')
 end
 
 -- ============================================================================
@@ -9198,54 +9201,54 @@ end
 -- ============================================================================
 print('--- Suite 79: Popout Spell Gem Bar Window Logic & Configuration ---')
 do
-    local fTriune = assert(io.open('TAC/lua/triune/init.lua', 'r'))
-    local triuneContent = fTriune:read('*all')
-    fTriune:close()
+    local fMcac = assert(io.open('MCAC/lua/mcac/init.lua', 'r'))
+    local mcacContent = fMcac:read('*all')
+    fMcac:close()
 
     local fReadme = assert(io.open('README.md', 'r'))
     local readmeContent = fReadme:read('*all')
     fReadme:close()
 
     -- 1. Verify defaultCtrl contains spell gem fields
-    assert_true(triuneContent:find('show_spell_gems%s*=%s*false') ~= nil,
+    assert_true(mcacContent:find('show_spell_gems%s*=%s*false') ~= nil,
         'Suite 79: defaultCtrl.show_spell_gems default is false')
-    assert_true(triuneContent:find('gem_lock%s*=%s*false') ~= nil,
+    assert_true(mcacContent:find('gem_lock%s*=%s*false') ~= nil,
         'Suite 79: defaultCtrl.gem_lock default is false')
-    assert_true(triuneContent:find('gem_alpha%s*=%s*0.85') ~= nil,
+    assert_true(mcacContent:find('gem_alpha%s*=%s*0.85') ~= nil,
         'Suite 79: defaultCtrl.gem_alpha default is 0.85')
-    assert_true(triuneContent:find("gem_orientation%s*=%s*'Auto'") ~= nil,
+    assert_true(mcacContent:find("gem_orientation%s*=%s*'Auto'") ~= nil,
         'Suite 79: defaultCtrl.gem_orientation default is Auto')
-    assert_true(triuneContent:find('gem_show_badges%s*=%s*true') ~= nil,
+    assert_true(mcacContent:find('gem_show_badges%s*=%s*true') ~= nil,
         'Suite 79: defaultCtrl.gem_show_badges default is true')
-    assert_true(triuneContent:find('gem_show_timer%s*=%s*true') ~= nil,
+    assert_true(mcacContent:find('gem_show_timer%s*=%s*true') ~= nil,
         'Suite 79: defaultCtrl.gem_show_timer default is true')
 
     -- 2. Verify window initialization and draw function
-    local sgContent = readFile('TAC/lua/tac/hud_spellgems.lua')
-    assert_true(triuneContent:find("mq%.imgui%.init%('TriuneSpellGemBarWindow'") == nil,
-        'Suite 79: TriuneSpellGemBarWindow imgui registration removed from triune.lua')
-    assert_true(triuneContent:find('function UI%.drawSpellGemBarWindow%(%)') == nil,
-        'Suite 79: UI.drawSpellGemBarWindow removed from triune.lua (hud_spellgems plugin)')
-    local sgPlugin = assert(loadfile('TAC/lua/tac/hud_spellgems.lua'))()
+    local sgContent = readFile('MCAC/lua/mcac/hud_spellgems.lua')
+    assert_true(mcacContent:find("mq%.imgui%.init%('MCACSpellGemBarWindow'") == nil,
+        'Suite 79: MCACSpellGemBarWindow imgui registration removed from mcac.lua')
+    assert_true(mcacContent:find('function UI%.drawSpellGemBarWindow%(%)') == nil,
+        'Suite 79: UI.drawSpellGemBarWindow removed from mcac.lua (hud_spellgems plugin)')
+    local sgPlugin = assert(loadfile('MCAC/lua/mcac/hud_spellgems.lua'))()
     assert_eq(sgPlugin.id, 'hud_spellgems', 'Suite 79: hud_spellgems plugin id')
     assert_eq(sgPlugin.hasThread, false, 'Suite 79: hud_spellgems is render-only')
     assert_type(sgPlugin.onDrawUI, 'function', 'Suite 79: hud_spellgems defines onDrawUI')
     assert_true(sgContent:find('function M%.drawSpellGemBarWindow%(%)') ~= nil,
         'Suite 79: hud_spellgems carries the spell gem bar renderer')
-    assert_true(sgContent:find('core%.getGemCooldownSec') ~= nil and triuneContent:find('getGemCooldownSec%s*=%s*UI%.getGemCooldownSec') ~= nil,
+    assert_true(sgContent:find('core%.getGemCooldownSec') ~= nil and mcacContent:find('getGemCooldownSec%s*=%s*UI%.getGemCooldownSec') ~= nil,
         'Suite 79: gem cooldown helper is reached through the exported core API')
 
     -- 3. Verify toolbar buttons
-    assert_true(readFile('TAC/lua/tac/hud_spellgems.lua'):find("flag = 'show_spell_gems'", 1, true) ~= nil,
+    assert_true(readFile('MCAC/lua/mcac/hud_spellgems.lua'):find("flag = 'show_spell_gems'", 1, true) ~= nil,
         'Suite 79: hud_spellgems declares its header window button (drawn by pm.drawHeaderButtons)')
     assert_true(sgContent:find('snap.maxGems = math.max(maxGems, highestUsed)', 1, true) ~= nil
         and sgContent:find('if slot <= maxGems then', 1, true) == nil,
         'Suite 79: every gem slot is polled and the bar grows to the highest memorized gem, not just Me.NumGems')
-    assert_true(triuneContent:find("Gems##miniGems") == nil and triuneContent:find("pcall(pm.drawHeaderButtons, 0)", 1, true) ~= nil,
+    assert_true(mcacContent:find("Gems##miniGems") == nil and mcacContent:find("pcall(pm.drawHeaderButtons, 0)", 1, true) ~= nil,
         'Suite 79: Mini GUI Gems button comes from pm.drawHeaderButtons, not a hardcoded button')
 
     -- 4. Verify slash command handler
-    assert_true(triuneContent:find("cmd == 'gems' or cmd == 'gembar' or cmd == 'spellbar'") ~= nil,
+    assert_true(mcacContent:find("cmd == 'gems' or cmd == 'gembar' or cmd == 'spellbar'") ~= nil,
         'Suite 79: /ac gems, /ac gembar, and /ac spellbar slash commands are registered')
 
     -- 5. Verify window context menus and actions
@@ -9262,19 +9265,19 @@ do
     -- 6. Verify Spellbook button and spell sets menu
     assert_true(sgContent:find("gemSpellBookBtn") ~= nil,
         'Suite 79: Spellbook button is rendered at end of gem bar')
-    assert_true(triuneContent:find("UI%.drawSpellbookIcon") ~= nil,
+    assert_true(mcacContent:find("UI%.drawSpellbookIcon") ~= nil,
         'Suite 79: High-detail vector Spellbook icon is drawn')
-    assert_true(triuneContent:find("runtime%.savePreset") ~= nil,
-        'Suite 79: Supports saving spell set preset in Triune loadout')
-    assert_true(triuneContent:find("runtime%.loadPreset") ~= nil,
+    assert_true(mcacContent:find("runtime%.savePreset") ~= nil,
+        'Suite 79: Supports saving spell set preset in MCAC loadout')
+    assert_true(mcacContent:find("runtime%.loadPreset") ~= nil,
         'Suite 79: Supports loading spell set preset into memorization queue')
-    assert_true(triuneContent:find("runtime%.deletePreset") ~= nil,
+    assert_true(mcacContent:find("runtime%.deletePreset") ~= nil,
         'Suite 79: Supports deleting saved spell set preset')
-    assert_true(triuneContent:find("UI%.col32") ~= nil,
+    assert_true(mcacContent:find("UI%.col32") ~= nil,
         'Suite 79: UI.col32 provides safe 0xAABBGGRR color generation')
-    assert_true(triuneContent:find("UI%.getGemCooldownSec") ~= nil,
+    assert_true(mcacContent:find("UI%.getGemCooldownSec") ~= nil,
         'Suite 79: UI.getGemCooldownSec converts EQ millisecond timer to true seconds')
-    assert_true(sgContent:find("M%.gemCooldownEnd") ~= nil and triuneContent:find("gemCooldownEnd") == nil,
+    assert_true(sgContent:find("M%.gemCooldownEnd") ~= nil and mcacContent:find("gemCooldownEnd") == nil,
         'Suite 79: gemCooldownEnd frame countdown is plugin-local state')
     assert_true(sgContent:find("local cdSec = math%.ceil%(timer%)") ~= nil,
         'Suite 79: Recast cooldowns simplified to integer seconds')
@@ -9285,7 +9288,7 @@ do
     assert_true(sgContent:find("table%.sort%(presetList,") ~= nil,
         'Suite 79: Saved spell set presets are sorted alphabetically')
 
-    assert_true(sgContent:find("M%.gemCooldownSpell") ~= nil and triuneContent:find("gemCooldownSpell") == nil,
+    assert_true(sgContent:find("M%.gemCooldownSpell") ~= nil and mcacContent:find("gemCooldownSpell") == nil,
         'Suite 79: gemCooldownSpell memorized-spell tracking is plugin-local state')
 
     -- 7. Pure logic simulation of countdown ticking
@@ -9348,11 +9351,11 @@ do
     assert_eq(fmtGemTimer(5), '5', 'Suite 79: 5s formats as 5')
 
     -- 9. Verify version sync
-    local vTriune = triuneContent:match("local VERSION%s*=%s*'(.-)'")
+    local vMcac = mcacContent:match("local VERSION%s*=%s*'(.-)'")
     local vReadme = readmeContent:match("Current version:%s*%*%*(.-)%*%*")
-    assert_eq(vTriune, '3.4', 'Suite 79: triune.lua VERSION is 3.4')
-    assert_eq(vReadme, '3.4', 'Suite 79: README.md version is 3.4')
-    assert_eq(vTriune, vReadme, 'Suite 79: Version numbers match across triune.lua and README.md')
+    assert_eq(vMcac, '3.51', 'Suite 79: mcac.lua VERSION is 3.51')
+    assert_eq(vReadme, '3.51', 'Suite 79: README.md version is 3.51')
+    assert_eq(vMcac, vReadme, 'Suite 79: Version numbers match across mcac.lua and README.md')
 end
 
 -- ============================================================================
@@ -9360,88 +9363,88 @@ end
 -- ============================================================================
 print('--- Suite 80: Popout Character Stats, Inventory & Currency Window Removal ---')
 do
-    local fTriune = assert(io.open('TAC/lua/triune/init.lua', 'r'))
-    local triuneContent = fTriune:read('*all')
-    fTriune:close()
+    local fMcac = assert(io.open('MCAC/lua/mcac/init.lua', 'r'))
+    local mcacContent = fMcac:read('*all')
+    fMcac:close()
 
     -- 1. Verify defaultCtrl does NOT contain character window fields
-    assert_true(triuneContent:find('show_character_window') == nil,
+    assert_true(mcacContent:find('show_character_window') == nil,
         'Suite 80: defaultCtrl.show_character_window was eliminated')
-    assert_true(triuneContent:find('char_lock') == nil,
+    assert_true(mcacContent:find('char_lock') == nil,
         'Suite 80: defaultCtrl.char_lock was eliminated')
-    assert_true(triuneContent:find('char_alpha') == nil,
+    assert_true(mcacContent:find('char_alpha') == nil,
         'Suite 80: defaultCtrl.char_alpha was eliminated')
-    assert_true(triuneContent:find('char_show_zerocur') == nil,
+    assert_true(mcacContent:find('char_show_zerocur') == nil,
         'Suite 80: defaultCtrl.char_show_zerocur was eliminated')
-    assert_true(triuneContent:find('char_slots_per_row') == nil,
+    assert_true(mcacContent:find('char_slots_per_row') == nil,
         'Suite 80: defaultCtrl.char_slots_per_row was eliminated')
 
     -- 2. Verify window initialization and draw function are eliminated
-    assert_true(triuneContent:find("TriuneCharacterWindow") == nil,
-        'Suite 80: TriuneCharacterWindow is not registered via mq.imgui.init')
-    assert_true(triuneContent:find('function UI%.drawCharacterWindow') == nil,
+    assert_true(mcacContent:find("MCACCharacterWindow") == nil,
+        'Suite 80: MCACCharacterWindow is not registered via mq.imgui.init')
+    assert_true(mcacContent:find('function UI%.drawCharacterWindow') == nil,
         'Suite 80: UI.drawCharacterWindow was eliminated')
 
     -- 3. Verify toolbar buttons are eliminated
-    assert_true(triuneContent:find("Character##hdrChar") == nil,
+    assert_true(mcacContent:find("Character##hdrChar") == nil,
         'Suite 80: Main toolbar Character toggle button was eliminated')
-    assert_true(triuneContent:find("Char##miniChar") == nil,
+    assert_true(mcacContent:find("Char##miniChar") == nil,
         'Suite 80: Mini GUI toolbar Char toggle button was eliminated')
 
     -- 4. Verify slash command handler is eliminated
-    assert_true(triuneContent:find("cmd == 'char' or cmd == 'charwin'") == nil,
+    assert_true(mcacContent:find("cmd == 'char' or cmd == 'charwin'") == nil,
         'Suite 80: /ac char and /ac character slash commands were eliminated')
 
     -- 5. Verify character window context menu and settings are eliminated
-    assert_true(triuneContent:find("charContextMenu") == nil,
+    assert_true(mcacContent:find("charContextMenu") == nil,
         'Suite 80: Character window context menu was eliminated')
 
     -- 6. Verify tabs and currency definitions are eliminated
-    assert_true(triuneContent:find("charStatsTab") == nil,
+    assert_true(mcacContent:find("charStatsTab") == nil,
         'Suite 80: Stats tab was eliminated')
-    assert_true(triuneContent:find("charInvTab") == nil,
+    assert_true(mcacContent:find("charInvTab") == nil,
         'Suite 80: Inventory tab was eliminated')
-    assert_true(triuneContent:find("charCurrTab") == nil,
+    assert_true(mcacContent:find("charCurrTab") == nil,
         'Suite 80: Currency tab was eliminated')
-    assert_true(triuneContent:find('UI%.coinDefs') == nil,
+    assert_true(mcacContent:find('UI%.coinDefs') == nil,
         'Suite 80: Coin definitions table was eliminated')
-    assert_true(triuneContent:find('UI%.altCurrencyDefs') == nil,
+    assert_true(mcacContent:find('UI%.altCurrencyDefs') == nil,
         'Suite 80: Alt currency definitions table was eliminated')
-    assert_true(triuneContent:find('UI%.readAltCurrencyAmount') == nil,
+    assert_true(mcacContent:find('UI%.readAltCurrencyAmount') == nil,
         'Suite 80: Alt currency reader was eliminated')
-    assert_true(triuneContent:find('UI%.readCoinAmount') == nil,
+    assert_true(mcacContent:find('UI%.readCoinAmount') == nil,
         'Suite 80: Coin amount reader was eliminated')
 
     -- 7. Verify item management executor queue is eliminated
-    assert_true(triuneContent:find('char_pendingAction') == nil,
+    assert_true(mcacContent:find('char_pendingAction') == nil,
         'Suite 80: char_pendingAction was eliminated')
 
     -- 8. Verify worn gear grid and EQ stat helpers are eliminated
-    assert_true(triuneContent:find('UI%.wornSlotNames') == nil,
+    assert_true(mcacContent:find('UI%.wornSlotNames') == nil,
         'Suite 80: Worn equipment slot names table was eliminated')
-    assert_true(triuneContent:find('UI%.wornLayout') == nil,
+    assert_true(mcacContent:find('UI%.wornLayout') == nil,
         'Suite 80: Worn equipment layout table was eliminated')
-    assert_true(triuneContent:find('UI%.readInvChildText') == nil,
+    assert_true(mcacContent:find('UI%.readInvChildText') == nil,
         'Suite 80: UI.readInvChildText helper was eliminated')
-    assert_true(triuneContent:find('UI%.drawEqSectionHeader') == nil,
+    assert_true(mcacContent:find('UI%.drawEqSectionHeader') == nil,
         'Suite 80: UI.drawEqSectionHeader helper was eliminated')
-    assert_true(triuneContent:find('UI%.drawEqSlashRow') == nil,
+    assert_true(mcacContent:find('UI%.drawEqSlashRow') == nil,
         'Suite 80: UI.drawEqSlashRow helper was eliminated')
-    assert_true(triuneContent:find('UI%.drawEqValRow') == nil,
+    assert_true(mcacContent:find('UI%.drawEqValRow') == nil,
         'Suite 80: UI.drawEqValRow helper was eliminated')
-    assert_true(triuneContent:find('UI%.drawEqStatCapRow') == nil,
+    assert_true(mcacContent:find('UI%.drawEqStatCapRow') == nil,
         'Suite 80: UI.drawEqStatCapRow helper was eliminated')
-    assert_true(triuneContent:find('UI%.drawEqModRow') == nil,
+    assert_true(mcacContent:find('UI%.drawEqModRow') == nil,
         'Suite 80: UI.drawEqModRow helper was eliminated')
 
     -- 9. Verify stats sync and background equipment check routines are eliminated
-    assert_true(triuneContent:find('runtime%.scanStatsFromInventoryWindow') == nil,
+    assert_true(mcacContent:find('runtime%.scanStatsFromInventoryWindow') == nil,
         'Suite 80: runtime.scanStatsFromInventoryWindow was eliminated')
-    assert_true(triuneContent:find('runtime%.checkWornItemsChanged') == nil,
+    assert_true(mcacContent:find('runtime%.checkWornItemsChanged') == nil,
         'Suite 80: runtime.checkWornItemsChanged was eliminated')
-    assert_true(triuneContent:find('runtime%.toggleSkillsWindow') == nil,
+    assert_true(mcacContent:find('runtime%.toggleSkillsWindow') == nil,
         'Suite 80: runtime.toggleSkillsWindow was eliminated')
-    assert_true(triuneContent:find('statSyncRequested') == nil,
+    assert_true(mcacContent:find('statSyncRequested') == nil,
         'Suite 80: statSyncRequested was eliminated')
 end
 
@@ -9450,50 +9453,50 @@ end
 -- ============================================================================
 print('--- Suite 81: Window Settings & Position Save/Restore Logic ---')
 do
-    local fTriune = assert(io.open('TAC/lua/triune/init.lua', 'r'))
-    local triuneContent = fTriune:read('*all')
-    fTriune:close()
+    local fMcac = assert(io.open('MCAC/lua/mcac/init.lua', 'r'))
+    local mcacContent = fMcac:read('*all')
+    fMcac:close()
 
     local fReadme = assert(io.open('README.md', 'r'))
     local readmeContent = fReadme:read('*all')
     fReadme:close()
 
     -- 1. Verify defaultCtrl contains window position fields
-    assert_true(triuneContent:find('saved_window_positions%s*=%s*{}') ~= nil,
+    assert_true(mcacContent:find('saved_window_positions%s*=%s*{}') ~= nil,
         'Suite 81: defaultCtrl.saved_window_positions default is empty table')
-    assert_true(triuneContent:find('winpos_auto_restore_on_resize%s*=%s*true') ~= nil,
+    assert_true(mcacContent:find('winpos_auto_restore_on_resize%s*=%s*true') ~= nil,
         'Suite 81: defaultCtrl.winpos_auto_restore_on_resize default is true')
-    assert_true(triuneContent:find('winpos_restore_visibility%s*=%s*false') ~= nil,
+    assert_true(mcacContent:find('winpos_restore_visibility%s*=%s*false') ~= nil,
         'Suite 81: defaultCtrl.winpos_restore_visibility default is false')
 
     -- 2. Window registry: core owns main/mini, plugin windows are appended dynamically
     local expectedKeys = { 'main', 'mini', 'unit_frames', 'group', 'effects', 'cooldowns', 'spellbook', 'xtarget', 'spell_gems' }
     for _, k in ipairs({ 'main', 'mini' }) do
-        assert_true(triuneContent:find("key%s*=%s*'" .. k .. "'") ~= nil,
+        assert_true(mcacContent:find("key%s*=%s*'" .. k .. "'") ~= nil,
             'Suite 81: runtime.CORE_WINDOWS tracks window key ' .. k)
     end
-    assert_true(triuneContent:find('function runtime.getManagedWindows()', 1, true) ~= nil,
+    assert_true(mcacContent:find('function runtime.getManagedWindows()', 1, true) ~= nil,
         'Suite 81: runtime.getManagedWindows builds the layout registry')
-    assert_true(triuneContent:find('runtime.MANAGED_WINDOWS', 1, true) == nil,
+    assert_true(mcacContent:find('runtime.MANAGED_WINDOWS', 1, true) == nil,
         'Suite 81: static runtime.MANAGED_WINDOWS list removed (plugin windows are discovered)')
     for _, k in ipairs({ 'unit_frames', 'group', 'effects', 'cooldowns', 'xtarget', 'spell_gems' }) do
-        assert_true(triuneContent:find("key%s*=%s*'" .. k .. "'") == nil,
+        assert_true(mcacContent:find("key%s*=%s*'" .. k .. "'") == nil,
             'Suite 81: core no longer hardcodes the ' .. k .. ' layout entry')
     end
 
     -- 3. Verify window position hooks
-    assert_true(triuneContent:find('function UI%.preBeginWindow%(winKey%)') ~= nil,
+    assert_true(mcacContent:find('function UI%.preBeginWindow%(winKey%)') ~= nil,
         'Suite 81: UI.preBeginWindow is defined')
-    assert_true(triuneContent:find('function UI%.postBeginWindow%(winKey%)') ~= nil,
+    assert_true(mcacContent:find('function UI%.postBeginWindow%(winKey%)') ~= nil,
         'Suite 81: UI.postBeginWindow is defined')
     local pluginWindowFiles = {
-        unit_frames = 'TAC/lua/tac/hud_unitframes.lua',
-        group       = 'TAC/lua/tac/hud_group.lua',
-        effects     = 'TAC/lua/tac/hud_effects.lua',
-        xtarget     = 'TAC/lua/tac/hud_xtarget.lua',
-        cooldowns   = 'TAC/lua/tac/hud_cooldowns.lua',
-        spell_gems  = 'TAC/lua/tac/hud_spellgems.lua',
-        spellbook   = 'TAC/lua/tac/spellbook.lua',
+        unit_frames = 'MCAC/lua/mcac/hud_unitframes.lua',
+        group       = 'MCAC/lua/mcac/hud_group.lua',
+        effects     = 'MCAC/lua/mcac/hud_effects.lua',
+        xtarget     = 'MCAC/lua/mcac/hud_xtarget.lua',
+        cooldowns   = 'MCAC/lua/mcac/hud_cooldowns.lua',
+        spell_gems  = 'MCAC/lua/mcac/hud_spellgems.lua',
+        spellbook   = 'MCAC/lua/mcac/spellbook.lua',
     }
     for _, k in ipairs(expectedKeys) do
         if pluginWindowFiles[k] then
@@ -9503,43 +9506,43 @@ do
             assert_true(plContent:find("core%.postBeginWindow%('" .. k .. "'%)") ~= nil,
                 'Suite 81: core.postBeginWindow is hooked for ' .. k .. ' in ' .. pluginWindowFiles[k])
         else
-            assert_true(triuneContent:find("UI%.preBeginWindow%('" .. k .. "'%)") ~= nil,
+            assert_true(mcacContent:find("UI%.preBeginWindow%('" .. k .. "'%)") ~= nil,
                 'Suite 81: UI.preBeginWindow is hooked for ' .. k)
-            assert_true(triuneContent:find("UI%.postBeginWindow%('" .. k .. "'%)") ~= nil,
+            assert_true(mcacContent:find("UI%.postBeginWindow%('" .. k .. "'%)") ~= nil,
                 'Suite 81: UI.postBeginWindow is hooked for ' .. k)
         end
     end
 
     -- 4. Verify save, restore, center, and reset logic
-    assert_true(triuneContent:find('function runtime%.saveWindowPositions%(') ~= nil,
+    assert_true(mcacContent:find('function runtime%.saveWindowPositions%(') ~= nil,
         'Suite 81: runtime.saveWindowPositions is defined')
-    assert_true(triuneContent:find('function runtime%.triggerRestoreWindows%(') ~= nil,
+    assert_true(mcacContent:find('function runtime%.triggerRestoreWindows%(') ~= nil,
         'Suite 81: runtime.triggerRestoreWindows is defined')
-    assert_true(triuneContent:find('function runtime%.resetWindowPositionsToDefault%(') ~= nil,
+    assert_true(mcacContent:find('function runtime%.resetWindowPositionsToDefault%(') ~= nil,
         'Suite 81: runtime.resetWindowPositionsToDefault is defined')
-    assert_true(triuneContent:find('function runtime%.centerWindow%(') ~= nil,
+    assert_true(mcacContent:find('function runtime%.centerWindow%(') ~= nil,
         'Suite 81: runtime.centerWindow is defined')
-    assert_true(triuneContent:find('function runtime%.checkDisplaySizeChange%(') ~= nil,
+    assert_true(mcacContent:find('function runtime%.checkDisplaySizeChange%(') ~= nil,
         'Suite 81: runtime.checkDisplaySizeChange handles display resolution/monitor recovery')
 
     -- 5. Verify Settings subtab and drawWindowSettings
-    assert_true(triuneContent:find("Window Settings##settingsWindows") ~= nil,
+    assert_true(mcacContent:find("Window Settings##settingsWindows") ~= nil,
         'Suite 81: Settings tab has Window Settings subtab')
-    assert_true(triuneContent:find('function UI%.drawWindowSettings%(%)') ~= nil,
+    assert_true(mcacContent:find('function UI%.drawWindowSettings%(%)') ~= nil,
         'Suite 81: UI.drawWindowSettings is defined')
-    assert_true(triuneContent:find("ManagedWinTable") ~= nil,
+    assert_true(mcacContent:find("ManagedWinTable") ~= nil,
         'Suite 81: Window Settings tab renders ManagedWinTable')
 
     -- 6. Verify slash command handler
-    assert_true(triuneContent:find("cmd == 'winpos' or cmd == 'windows' or cmd == 'window'") ~= nil,
+    assert_true(mcacContent:find("cmd == 'winpos' or cmd == 'windows' or cmd == 'window'") ~= nil,
         'Suite 81: /ac winpos slash command is registered')
 
     -- 7. Verify version sync
-    local vTriune = triuneContent:match("local VERSION%s*=%s*'(.-)'")
+    local vMcac = mcacContent:match("local VERSION%s*=%s*'(.-)'")
     local vReadme = readmeContent:match("Current version:%s*%*%*(.-)%*%*")
-    assert_eq(vTriune, '3.4', 'Suite 81: triune.lua VERSION is 3.4')
-    assert_eq(vReadme, '3.4', 'Suite 81: README.md version is 3.4')
-    assert_eq(vTriune, vReadme, 'Suite 81: Version numbers match across triune.lua and README.md')
+    assert_eq(vMcac, '3.51', 'Suite 81: mcac.lua VERSION is 3.51')
+    assert_eq(vReadme, '3.51', 'Suite 81: README.md version is 3.51')
+    assert_eq(vMcac, vReadme, 'Suite 81: Version numbers match across mcac.lua and README.md')
 end
 
 -- ============================================================================
@@ -9633,10 +9636,10 @@ do
     assert_eq(filtered[1].name, 'Combat Agility', 'Suite 82: First valid item is Combat Agility')
     assert_eq(filtered[2].name, 'Planar Power', 'Suite 82: Second valid item is Planar Power')
 
-    -- 4. Source code verification of TAC/lua/triune/init.lua
-    local triuneContent = readFile('TAC/lua/triune/init.lua')
+    -- 4. Source code verification of MCAC/lua/mcac/init.lua
+    local mcacContent = readFile('MCAC/lua/mcac/init.lua')
     assert_true(AA_CONTENT:find("if r > 0 and mr <= 0 then%s+isForeignStub = true") ~= nil,
-        'Suite 82: triune.lua detects foreign stubs with r > 0 and mr <= 0')
+        'Suite 82: mcac.lua detects foreign stubs with r > 0 and mr <= 0')
     assert_true(AA_CONTENT:find("if not maxRank or maxRank <= 0 then%s+return%s+end") ~= nil,
         'Suite 82: recordScannedAA rejects abilities with maxRank <= 0')
     assert_true(AA_CONTENT:find("if not cd%.maxRank or cd%.maxRank <= 0 then%s+rt%.cachedAAData%[cName%] = nil") ~= nil,
@@ -9652,47 +9655,47 @@ end
 -- ============================================================================
 print('--- Suite 83: Combat Styles (Melee / Ranged / Spell) ---')
 do
-    local triuneContent = readFile('TAC/lua/triune/init.lua')
+    local mcacContent = readFile('MCAC/lua/mcac/init.lua')
 
     -- 1. Settings tab exposes all three styles and both distance sliders
-    assert_true(triuneContent:find("RadioButton('Melee', ctrl.combat_style == 'Melee')", 1, true) ~= nil,
+    assert_true(mcacContent:find("RadioButton('Melee', ctrl.combat_style == 'Melee')", 1, true) ~= nil,
         'Suite 83: Melee radio button present')
-    assert_true(triuneContent:find("RadioButton('Ranged (bow)', ctrl.combat_style == 'Ranged')", 1, true) ~= nil,
+    assert_true(mcacContent:find("RadioButton('Ranged (bow)', ctrl.combat_style == 'Ranged')", 1, true) ~= nil,
         'Suite 83: Ranged radio button present')
-    assert_true(triuneContent:find("RadioButton('Spell', ctrl.combat_style == 'Spell')", 1, true) ~= nil,
+    assert_true(mcacContent:find("RadioButton('Spell', ctrl.combat_style == 'Spell')", 1, true) ~= nil,
         'Suite 83: Spell radio button present')
-    assert_true(triuneContent:find("meleeRangeSlider", 1, true) ~= nil,
+    assert_true(mcacContent:find("meleeRangeSlider", 1, true) ~= nil,
         'Suite 83: meleeRangeSlider present in Settings tab')
-    assert_true(triuneContent:find("rangedRangeSlider", 1, true) ~= nil,
+    assert_true(mcacContent:find("rangedRangeSlider", 1, true) ~= nil,
         'Suite 83: rangedRangeSlider present in Settings tab')
 
     -- 2. Server attack-mode plumbing for Ranged style
-    assert_true(triuneContent:find("mq.event('TriuneAttackModeChanged', 'Attack mode changed to: #1#'", 1, true) ~= nil,
-        'Suite 83: TriuneAttackModeChanged event registered')
-    assert_true(triuneContent:find("function runtime.engageRangedAttack(tid)", 1, true) ~= nil,
+    assert_true(mcacContent:find("mq.event('MCACAttackModeChanged', 'Attack mode changed to: #1#'", 1, true) ~= nil,
+        'Suite 83: MCACAttackModeChanged event registered')
+    assert_true(mcacContent:find("function runtime.engageRangedAttack(tid)", 1, true) ~= nil,
         'Suite 83: engageRangedAttack helper defined')
-    assert_true(triuneContent:find("function runtime.ensureRangedAutoAttack(tid)", 1, true) ~= nil,
+    assert_true(mcacContent:find("function runtime.ensureRangedAutoAttack(tid)", 1, true) ~= nil,
         'Suite 83: ensureRangedAutoAttack helper defined')
-    assert_true(triuneContent:find("runtime.revertAttackModeToMelee = function()", 1, true) ~= nil,
+    assert_true(mcacContent:find("runtime.revertAttackModeToMelee = function()", 1, true) ~= nil,
         'Suite 83: revertAttackModeToMelee helper defined')
-    assert_true(triuneContent:find("function runtime.setCombatStyle(style)", 1, true) ~= nil,
+    assert_true(mcacContent:find("function runtime.setCombatStyle(style)", 1, true) ~= nil,
         'Suite 83: setCombatStyle helper defined')
-    assert_true(triuneContent:find("mq.cmd('/say #attackmode ranged')", 1, true) ~= nil,
+    assert_true(mcacContent:find("mq.cmd('/say #attackmode ranged')", 1, true) ~= nil,
         'Suite 83: sends #attackmode ranged')
-    assert_true(triuneContent:find("mq.cmd('/say #attackmode melee')", 1, true) ~= nil,
+    assert_true(mcacContent:find("mq.cmd('/say #attackmode melee')", 1, true) ~= nil,
         'Suite 83: sends #attackmode melee on revert')
     -- The #attackmode switch must live in exactly one place (the helper), not be copy-pasted per call site
-    local _, sendCount = triuneContent:gsub("mq%.cmd%('/say #attackmode ranged'%)", '')
+    local _, sendCount = mcacContent:gsub("mq%.cmd%('/say #attackmode ranged'%)", '')
     assert_eq(sendCount, 1, 'Suite 83: #attackmode ranged is only sent from engageRangedAttack')
 
     -- 3. Bounded retry: never loop forever waiting for the server echo
-    assert_true(triuneContent:find("runtime.ATTACKMODE_MAX_ATTEMPTS = 3", 1, true) ~= nil,
+    assert_true(mcacContent:find("runtime.ATTACKMODE_MAX_ATTEMPTS = 3", 1, true) ~= nil,
         'Suite 83: attack-mode confirmation retry is bounded')
-    assert_true(triuneContent:find("runtime.serverAttackModeAssumed = true", 1, true) ~= nil,
+    assert_true(mcacContent:find("runtime.serverAttackModeAssumed = true", 1, true) ~= nil,
         'Suite 83: falls back to assumed Ranged mode after retries')
 
     -- 4. Zone-in resets the tracked server attack mode (server defaults back to melee)
-    local onZoned = triuneContent:match("runtime%.onZoned = function%(%)(.-)\nend")
+    local onZoned = mcacContent:match("runtime%.onZoned = function%(%)(.-)\nend")
     assert_true(onZoned ~= nil, 'Suite 83: onZoned body located')
     assert_true(onZoned and onZoned:find("runtime.serverAttackMode = 'Melee'", 1, true) ~= nil,
         'Suite 83: onZoned resets serverAttackMode to Melee')
@@ -9700,14 +9703,14 @@ do
         'Suite 83: onZoned resets lastRangedAttackTargetId')
 
     -- 5. Style-aware engine paths
-    assert_true(triuneContent:find("if style ~= 'Melee' then\n        return rangedApproachDist(ctrl.ranged_dist or 40)", 1, true) ~= nil,
+    assert_true(mcacContent:find("if style ~= 'Melee' then\n        return rangedApproachDist(ctrl.ranged_dist or 40)", 1, true) ~= nil,
         'Suite 83: desiredRange approaches to just inside ranged_dist for non-Melee styles')
     -- Ranged/Spell approach margin: moveToward accepts arrival at target + 3,
     -- while the engage gate's reach is the raw slider, so the approach must
     -- sit at least 3 inside the slider or a character can stop "arrived" yet
     -- "out of reach" and never fire.
     do
-        local fn = triuneContent:match('local function rangedApproachDist%(reach%)\n(.-)\nend')
+        local fn = mcacContent:match('local function rangedApproachDist%(reach%)\n(.-)\nend')
         assert_true(fn ~= nil, 'Suite 83: rangedApproachDist located')
         local rangedApproachDist = load('return function(reach)\n' .. fn .. '\nend')()
         assert_eq(rangedApproachDist(40), 37, 'Suite 83: 40-unit slider approaches to 37')
@@ -9719,21 +9722,21 @@ do
                 'Suite 83: arrival tolerance stays inside reach ' .. reach)
         end
     end
-    assert_true(triuneContent:find("local isMelee = (not followOnly and (ctrl and ctrl.combat_style or 'Melee') == 'Melee')", 1, true) ~= nil,
+    assert_true(mcacContent:find("local isMelee = (not followOnly and (ctrl and ctrl.combat_style or 'Melee') == 'Melee')", 1, true) ~= nil,
         'Suite 83: moveToward arrival tolerance is style-aware')
-    assert_true(triuneContent:find("if ctrl.mode == 'Puller' and (ctrl.combat_style or 'Melee') == 'Melee' and not mq.TLO.Me.Combat() then", 1, true) ~= nil,
+    assert_true(mcacContent:find("if ctrl.mode == 'Puller' and (ctrl.combat_style or 'Melee') == 'Melee' and not mq.TLO.Me.Combat() then", 1, true) ~= nil,
         'Suite 83: Puller FIGHTING /attack on is Melee-only')
     -- Ranged / Spell / Pet pull methods stop at the Engagement Distance (capped
     -- by what the bow or pull spell can reach) and fire the tag from there;
     -- the combat style only takes over once the mob is tagged.
-    local _, tagReachUses = triuneContent:gsub("reqRange = runtime%.rangedApproachDist%(runtime%.pullTagReach%(pullStyle%)%)", '')
+    local _, tagReachUses = mcacContent:gsub("reqRange = runtime%.rangedApproachDist%(runtime%.pullTagReach%(pullStyle%)%)", '')
     assert_eq(tagReachUses, 2, 'Suite 83: Camp and Hunt pulls both approach to pullTagReach (Engagement Distance)')
-    assert_true(triuneContent:find("local tagged = isXTargetId(id) or runtime.playerHasAggro(id)\n                    or (pullStyle ~= 'Ranged' and mq.TLO.Me.Combat())", 1, true) ~= nil,
+    assert_true(mcacContent:find("local tagged = isXTargetId(id) or runtime.playerHasAggro(id)\n                    or (pullStyle ~= 'Ranged' and mq.TLO.Me.Combat())", 1, true) ~= nil,
         'Suite 83: Hunt ranged pull is tagged by aggro, not by our own /attack on')
-    assert_true(triuneContent:find("mq.cmd('/autofire on')", 1, true) == nil,
+    assert_true(mcacContent:find("mq.cmd('/autofire on')", 1, true) == nil,
         'Suite 83: bow tag no longer relies on /autofire (this server ignores it)')
     do
-        local fn = triuneContent:match('function runtime%.pullTagReach%(pullStyle%)\n(.-)\nend')
+        local fn = mcacContent:match('function runtime%.pullTagReach%(pullStyle%)\n(.-)\nend')
         assert_true(fn ~= nil, 'Suite 83: pullTagReach located')
         assert_true(fn:find("mq.TLO.Spell(name).Range()", 1, true) ~= nil, 'Suite 83: Spell pull reach capped by the pull spell range')
         assert_true(fn:find("mq.TLO.Me.Inventory('ranged')", 1, true) ~= nil and fn:find("mq.TLO.Me.Inventory('ammo')", 1, true) ~= nil,
@@ -9743,49 +9746,49 @@ do
     end
     -- After a bow tag, a Melee stance must revert the server attack mode before
     -- its own /attack on, or it fires the bow at weapon reach.
-    assert_true(triuneContent:find("function runtime.meleeAttackOn()\n    if runtime.serverAttackMode == 'Ranged' then\n        runtime.revertAttackModeToMelee()\n        return false", 1, true) ~= nil,
+    assert_true(mcacContent:find("function runtime.meleeAttackOn()\n    if runtime.serverAttackMode == 'Ranged' then\n        runtime.revertAttackModeToMelee()\n        return false", 1, true) ~= nil,
         'Suite 83: meleeAttackOn reverts a lingering Ranged attack mode first')
-    local _, rawMeleeAttackOn = triuneContent:gsub("if not mq%.TLO%.Me%.Combat%(%) then mq%.cmd%('/attack on'%) end", '')
+    local _, rawMeleeAttackOn = mcacContent:gsub("if not mq%.TLO%.Me%.Combat%(%) then mq%.cmd%('/attack on'%) end", '')
     assert_eq(rawMeleeAttackOn, 2, 'Suite 83: raw melee /attack on only inside meleeAttackOn and ensureRangedAutoAttack')
     -- The Melee pull method never drags a Ranged/Spell character into weapon
     -- reach: every stance approaches to its own Combat Distance and only the
     -- tag differs (Spell stance tags with its pull spell from cast range).
-    assert_true(triuneContent:find("if pullStyle == 'Melee' then\n                reqRange = desiredRange(runtime.pullTargetId)", 1, true) ~= nil,
+    assert_true(mcacContent:find("if pullStyle == 'Melee' then\n                reqRange = desiredRange(runtime.pullTargetId)", 1, true) ~= nil,
         'Suite 83: Melee pull method approaches to the active style\'s desiredRange')
-    assert_true(triuneContent:find("if pullStyle == 'Melee' and combatStyle == 'Spell' then tagStyle = 'Spell' end", 1, true) ~= nil,
+    assert_true(mcacContent:find("if pullStyle == 'Melee' and combatStyle == 'Spell' then tagStyle = 'Spell' end", 1, true) ~= nil,
         'Suite 83: Melee pull with Spell stance tags with the pull spell, never melee')
-    assert_true(triuneContent:find("if tagStyle == 'Melee' then\n                    if combatStyle == 'Ranged' then\n                        if not isCasting() then runtime.engageRangedAttack(tid) end", 1, true) ~= nil,
+    assert_true(mcacContent:find("if tagStyle == 'Melee' then\n                    if combatStyle == 'Ranged' then\n                        if not isCasting() then runtime.engageRangedAttack(tid) end", 1, true) ~= nil,
         'Suite 83: Melee pull with Ranged stance tags via engageRangedAttack')
     -- Hunt mode: a tagged mob is fought from the style's reach -- no more
     -- stopMoving() every tick at the pull distance, and no engage flag until
     -- the character is actually inside Combat Distance.
-    assert_true(triuneContent:find("if tagged and pullStyle ~= 'Melee' then", 1, true) ~= nil,
+    assert_true(mcacContent:find("if tagged and pullStyle ~= 'Melee' then", 1, true) ~= nil,
         'Suite 83: Hunt post-tag branch defers to combat-style positioning')
-    assert_true(triuneContent:find("local atStyleReach = arrived or (distToId(id) <= runtime.styleReach(id) and hasLoS(id))", 1, true) ~= nil,
+    assert_true(mcacContent:find("local atStyleReach = arrived or (distToId(id) <= runtime.styleReach(id) and hasLoS(id))", 1, true) ~= nil,
         'Suite 83: Hunt engage gate uses the shared styleReach')
-    assert_true(triuneContent:find("elseif ctrl.combat_style == 'Ranged' then\n                            if not isCasting() then runtime.engageRangedAttack(id) end", 1, true) ~= nil,
+    assert_true(mcacContent:find("elseif ctrl.combat_style == 'Ranged' then\n                            if not isCasting() then runtime.engageRangedAttack(id) end", 1, true) ~= nil,
         'Suite 83: Hunt Melee pull routes a Ranged style through engageRangedAttack, not /attack on')
-    assert_true(triuneContent:find("if ctrl.mode ~= 'Manual' and (style == 'Melee' or not isCasting()) then\n                    moveToward(tid, desiredRange(tid))", 1, true) ~= nil,
+    assert_true(mcacContent:find("if ctrl.mode ~= 'Manual' and (style == 'Melee' or not isCasting()) then\n                    moveToward(tid, desiredRange(tid))", 1, true) ~= nil,
         'Suite 83: Ranged/Spell re-close waits for the current cast to finish')
-    assert_true(triuneContent:find("or 100) or 40\n", 1, true) == nil,
+    assert_true(mcacContent:find("or 100) or 40\n", 1, true) == nil,
         'Suite 83: no hard-coded 40 ranged pull distance remains')
-    assert_true(triuneContent:find("Spell style: no auto-attack at all", 1, true) ~= nil,
+    assert_true(mcacContent:find("Spell style: no auto-attack at all", 1, true) ~= nil,
         'Suite 83: Spell style branch documented in auto-attack block')
-    assert_true(triuneContent:find("local isAssistBehind = (style == 'Melee' and ctrl.mode == 'Assist' and ctrl.assist_behind ~= false)", 1, true) ~= nil,
+    assert_true(mcacContent:find("local isAssistBehind = (style == 'Melee' and ctrl.mode == 'Assist' and ctrl.assist_behind ~= false)", 1, true) ~= nil,
         'Suite 83: Assist behind-positioning is Melee-only')
-    assert_true(triuneContent:find("if tpct < 100 and runtime.playerHasAggro(tid) then return true end", 1, true) ~= nil,
+    assert_true(mcacContent:find("if tpct < 100 and runtime.playerHasAggro(tid) then return true end", 1, true) ~= nil,
         'Suite 83: playerIsEngagingTarget detects Spell-style engagement via HP drop + aggro')
 
     -- 6. Slash commands
-    assert_true(triuneContent:find("elseif st == 'ranged' or st == 'bow' then", 1, true) ~= nil,
+    assert_true(mcacContent:find("elseif st == 'ranged' or st == 'bow' then", 1, true) ~= nil,
         'Suite 83: /ac style ranged|bow accepted')
-    assert_true(triuneContent:find("elseif st == 'spell' or st == 'cast' or st == 'caster' then", 1, true) ~= nil,
+    assert_true(mcacContent:find("elseif st == 'spell' or st == 'cast' or st == 'caster' then", 1, true) ~= nil,
         'Suite 83: /ac style spell|cast|caster accepted')
-    assert_true(triuneContent:find("cmd == 'range' or cmd == 'meleerange' or cmd == 'rangeddist' or cmd == 'dist'", 1, true) ~= nil,
+    assert_true(mcacContent:find("cmd == 'range' or cmd == 'meleerange' or cmd == 'rangeddist' or cmd == 'dist'", 1, true) ~= nil,
         'Suite 83: /ac range, meleerange, rangeddist, dist commands present')
 
     -- 7. Pure logic: the setCombatStyle helper, run against a stub environment
-    local styleSrc = triuneContent:match("(function runtime%.setCombatStyle%(style%).-\nend)")
+    local styleSrc = mcacContent:match("(function runtime%.setCombatStyle%(style%).-\nend)")
     assert_true(styleSrc ~= nil, 'Suite 83: setCombatStyle source extracted')
     if styleSrc then
         local cmds = {}
@@ -9829,7 +9832,7 @@ end
 -- ============================================================================
 print('--- Suite 84: Auto AA Minimum 5 AA Bank Slider & Auto-Purchase Reliability ---')
 do
-    local triuneContent = readFile('TAC/lua/triune/init.lua')
+    local mcacContent = readFile('MCAC/lua/mcac/init.lua')
 
     -- 1. Verify bank slider in UI enforces a minimum of 5 AA
     assert_true(AA_CONTENT:find("SliderInt('##autoAaThresh', curThresh, 5, 100, 'Bank: %d')", 1, true) ~= nil,
@@ -9838,7 +9841,7 @@ do
         'Suite 84: Bank slider tooltip indicates 5 minimum AA points')
 
     -- 2. Verify sanitizeCtrl clamps auto_spend_aa_threshold to at least 5
-    assert_true(triuneContent:find("tonumber(c.auto_spend_aa_threshold) < 5 then", 1, true) ~= nil,
+    assert_true(mcacContent:find("tonumber(c.auto_spend_aa_threshold) < 5 then", 1, true) ~= nil,
         'Suite 84: sanitizeCtrl clamps auto_spend_aa_threshold to minimum of 5')
 
     -- 3. Verify checkAutoSpendAA halts early if unspent < 5 to avoid micro-pauses
@@ -9848,7 +9851,7 @@ do
     -- 4. Verify findAAInWindowLists prioritizes preferredTab and does not overmatch substrings
     assert_true(AA_CONTENT:find("function AA.findAAInWindowLists(targetName, preferredTab)", 1, true) ~= nil,
         'Suite 84: findAAInWindowLists accepts preferredTab parameter')
-    assert_true(triuneContent:find("cleanTarget:find(cleanRow, 1, true)", 1, true) == nil,
+    assert_true(mcacContent:find("cleanTarget:find(cleanRow, 1, true)", 1, true) == nil,
         'Suite 84: findAAInWindowLists eliminated dangerous substring overmatching')
 
     -- 5. Verify Special tab abilities (like Fireworks) and designated auto_spend_aa_name are whitelisted in isAAAllowedForPlayer
@@ -9867,7 +9870,7 @@ end
 -- ============================================================================
 print('--- Suite 85: Auto AA Fireworks & Summon Firework (/alt act 17788) Reliability ---')
 do
-    local triuneContent = readFile('TAC/lua/triune/init.lua')
+    local mcacContent = readFile('MCAC/lua/mcac/init.lua')
 
     -- 1. Verify post-purchase auto-summon and cooldown checks
     assert_true(AA_CONTENT:find("AA.scheduleFireworksSummon(fwId, task.name)", 1, true) ~= nil,
@@ -9876,7 +9879,7 @@ do
         'Suite 85: checkAutoSummonFireworks checks timer via Summon Firework')
     assert_true(AA_CONTENT:find("AltAbilityTimer('Alternately Advanced Fireworks')", 1, true) ~= nil,
         'Suite 85: checkAutoSummonFireworks checks timer via Alternately Advanced Fireworks')
-    assert_true(triuneContent:find("/alt act %d", 1, true) ~= nil,
+    assert_true(mcacContent:find("/alt act %d", 1, true) ~= nil,
         'Suite 85: fireworks summoning uses /alt act command')
 
     -- 2. Verify priority candidate canTrainMet bypass for Special tab abilities
@@ -9938,14 +9941,14 @@ do
 end
 
 -- ============================================================================
--- Suite 86: Triune Modular Plugin System & Coroutine Fiber Execution Logic
+-- Suite 86: MCAC Modular Plugin System & Coroutine Fiber Execution Logic
 -- ============================================================================
 do
     print('--- Suite 86: Modular Plugin Engine & Coroutine Fiber Execution Logic ---')
 
     -- 1. Verify auto_accept.lua loads and adheres to the plugin specification
-    local fAutoAccept = assert(loadfile('TAC/lua/tac/auto_accept.lua'))
-    assert_true(fAutoAccept ~= nil, 'Suite 86: TAC/lua/tac/auto_accept.lua compiles cleanly')
+    local fAutoAccept = assert(loadfile('MCAC/lua/mcac/auto_accept.lua'))
+    assert_true(fAutoAccept ~= nil, 'Suite 86: MCAC/lua/mcac/auto_accept.lua compiles cleanly')
     local okAA, pAA = pcall(fAutoAccept)
     assert_true(okAA and type(pAA) == 'table', 'Suite 86: auto_accept returns a valid plugin table')
     assert_eq(pAA.id, 'auto_accept', 'Suite 86: auto_accept has correct id')
@@ -9957,8 +9960,8 @@ do
     assert_true(type(pAA.onDrawSettings) == 'function', 'Suite 86: auto_accept provides onDrawSettings hook')
 
     -- 2. Verify floating_damage.lua loads and adheres to the plugin specification
-    local fFloatDmg = assert(loadfile('TAC/lua/tac/floating_damage.lua'))
-    assert_true(fFloatDmg ~= nil, 'Suite 86: TAC/lua/tac/floating_damage.lua compiles cleanly')
+    local fFloatDmg = assert(loadfile('MCAC/lua/mcac/floating_damage.lua'))
+    assert_true(fFloatDmg ~= nil, 'Suite 86: MCAC/lua/mcac/floating_damage.lua compiles cleanly')
     local okFD, pFD = pcall(fFloatDmg)
     assert_true(okFD and type(pFD) == 'table', 'Suite 86: floating_damage returns a valid plugin table')
     assert_eq(pFD.id, 'floating_damage', 'Suite 86: floating_damage has correct id')
@@ -9976,7 +9979,7 @@ do
         local fdMq = {
             event = function(name, _, fn) fdHandlers[name] = fn end,
             unevent = function() end,
-            TLO = { Me = { CleanName = function() return 'Triunetester' end } },
+            TLO = { Me = { CleanName = function() return 'Mcactester' end } },
         }
         local drawCalls = { text = 0, circle = 0, circleFilled = 0, rect = 0 }
         local fdDrawList = {
@@ -10001,7 +10004,7 @@ do
         local fdSaves = 0
         pFD.onInit({ ctrl = fdCtrl, mq = fdMq, ImGui = fdImGui, colors = {}, saveLoadout = function() fdSaves = fdSaves + 1 end })
         assert_eq(fdCtrl.show_crit_floaters, true, 'Suite 86: floating_damage seeds show_crit_floaters')
-        for _, n in ipairs({ 'TacCritHit', 'TacCripBlow', 'TacDeadlyStrike', 'TacSlayUndead', 'TacFinishBlow', 'TacAssassinate', 'TacHeadshot', 'TacFlurry', 'TacFlurry2', 'TacSpellCrit', 'TacHealCrit', 'TacDotCrit' }) do
+        for _, n in ipairs({ 'McacCritHit', 'McacCripBlow', 'McacDeadlyStrike', 'McacSlayUndead', 'McacFinishBlow', 'McacAssassinate', 'McacHeadshot', 'McacFlurry', 'McacFlurry2', 'McacSpellCrit', 'McacHealCrit', 'McacDotCrit' }) do
             assert_true(type(fdHandlers[n]) == 'function', 'Suite 86: floating_damage registers ' .. n)
         end
 
@@ -10034,31 +10037,31 @@ do
         -- Melee / ranged / skill crits reach the client in third person with the
         -- attacker's name (eqstr 1023 / 1021 / 1024 / 1007 / 1009 / 1016 / 5745 /
         -- 1045); someone else's crit must not spawn anything.
-        fdHandlers.TacCritHit('Bob scores a critical hit! (999)', 'Bob', '999')
-        fdHandlers.TacCripBlow('Bobpet00 lands a Crippling Blow!(999)', 'Bobpet00', '999')
-        fdHandlers.TacDeadlyStrike("Bob tells you, 'Triunetester scores a Deadly Strike!(999)'", "Bob tells you, 'Triunetester", '999')
-        fdHandlers.TacAssassinate('Bob ASSASSINATES their victim!!', 'Bob')
-        fdHandlers.TacHeadshot('Bob performs a FATAL BOW SHOT!!', 'Bob')
-        fdHandlers.TacFlurry2('Bob executes a FLURRY of attacks on a rat!', 'Bob')
+        fdHandlers.McacCritHit('Bob scores a critical hit! (999)', 'Bob', '999')
+        fdHandlers.McacCripBlow('Bobpet00 lands a Crippling Blow!(999)', 'Bobpet00', '999')
+        fdHandlers.McacDeadlyStrike("Bob tells you, 'Mcactester scores a Deadly Strike!(999)'", "Bob tells you, 'Mcactester", '999')
+        fdHandlers.McacAssassinate('Bob ASSASSINATES their victim!!', 'Bob')
+        fdHandlers.McacHeadshot('Bob performs a FATAL BOW SHOT!!', 'Bob')
+        fdHandlers.McacFlurry2('Bob executes a FLURRY of attacks on a rat!', 'Bob')
         -- typed chat with the trigger words must not fire the loose DoT / heal fallbacks
-        fdHandlers.TacDotCrit("Bob tells the group, 'your critical dot hit (99999)'", '99999')
-        fdHandlers.TacHealCrit2("You tell your party, 'critical heal (99999)'", '99999')
+        fdHandlers.McacDotCrit("Bob tells the group, 'your critical dot hit (99999)'", '99999')
+        fdHandlers.McacHealCrit2("You tell your party, 'critical heal (99999)'", '99999')
         pFD.onDrawUI()
         assert_eq(begun, 0, "Suite 86: floating_damage ignores other players' melee crits and quoted chat")
 
         -- Own crits: a crit, a bigger crit (record), and a massive spell crit (particles + rings + flash)
-        fdHandlers.TacCritHit('Triunetester scores a critical hit! (420)', 'Triunetester', '420')
-        fdHandlers.TacCritHit('Triunetester scores a critical hit! (1450)', 'triunetester', '1450')
-        fdHandlers.TacCripBlow('Triunetester lands a Crippling Blow!(800)', 'Triunetester', '800')
-        fdHandlers.TacDeadlyStrike('Triunetester scores a Deadly Strike!(700)', 'Triunetester', '700')
-        fdHandlers.TacSlayUndead("Triunetester's holy blade cleanses his target!(1200)", 'Triunetester', '1200')
-        fdHandlers.TacFinishBlow('Triunetester scores a Finishing Blow!!', 'Triunetester')
-        fdHandlers.TacHeadshot('Triunetester performs a FATAL BOW SHOT!!', 'Triunetester')
-        fdHandlers.TacFlurry2('Triunetester executes a FLURRY of attacks on a rat!', 'Triunetester')
-        fdHandlers.TacFlurry('You unleash a flurry of attacks.')
-        fdHandlers.TacSpellCrit('You deliver a critical blast! (12450)', '12450')
-        fdHandlers.TacHealCrit('You perform an exceptional heal! (3000)', '3000')
-        fdHandlers.TacAssassinate('Triunetester ASSASSINATES their victim!!', 'Triunetester')
+        fdHandlers.McacCritHit('Mcactester scores a critical hit! (420)', 'Mcactester', '420')
+        fdHandlers.McacCritHit('Mcactester scores a critical hit! (1450)', 'mcactester', '1450')
+        fdHandlers.McacCripBlow('Mcactester lands a Crippling Blow!(800)', 'Mcactester', '800')
+        fdHandlers.McacDeadlyStrike('Mcactester scores a Deadly Strike!(700)', 'Mcactester', '700')
+        fdHandlers.McacSlayUndead("Mcactester's holy blade cleanses his target!(1200)", 'Mcactester', '1200')
+        fdHandlers.McacFinishBlow('Mcactester scores a Finishing Blow!!', 'Mcactester')
+        fdHandlers.McacHeadshot('Mcactester performs a FATAL BOW SHOT!!', 'Mcactester')
+        fdHandlers.McacFlurry2('Mcactester executes a FLURRY of attacks on a rat!', 'Mcactester')
+        fdHandlers.McacFlurry('You unleash a flurry of attacks.')
+        fdHandlers.McacSpellCrit('You deliver a critical blast! (12450)', '12450')
+        fdHandlers.McacHealCrit('You perform an exceptional heal! (3000)', '3000')
+        fdHandlers.McacAssassinate('Mcactester ASSASSINATES their victim!!', 'Mcactester')
         pFD.onDrawUI()
         assert_eq(begun, 1, 'Suite 86: floating_damage opens the overlay once floaters exist')
         assert_true(drawCalls.text > 0, 'Suite 86: floating_damage draws text')
@@ -10200,23 +10203,23 @@ do
     simTick(false, 3.5)
     assert_eq(testTickCount, 4, 'Suite 86: healthy plugin keeps running unaffected by sibling crash')
 
-    -- 5. Source verification in triune.lua
-    local triuneContent = readFile('TAC/lua/triune/init.lua')
-    assert_true(triuneContent:find('function runtime.initPluginManager()', 1, true) ~= nil,
-        'Suite 86: runtime.initPluginManager defined in triune.lua')
-    assert_true(triuneContent:find('function UI.drawPluginsTab()', 1, true) ~= nil,
-        'Suite 86: UI.drawPluginsTab defined in triune.lua')
-    assert_true(triuneContent:find("ImGui.BeginTabItem('Plugins##settingsPlugins')", 1, true) ~= nil,
-        'Suite 86: Plugins tab registered under Settings tab in triune.lua')
-    assert_true(triuneContent:find('runtime.pluginManager.tick()', 1, true) ~= nil,
-        'Suite 86: pluginManager.tick called from main loop in triune.lua')
-    assert_true(triuneContent:find('runtime.pluginManager.drawUI()', 1, true) ~= nil,
-        'Suite 86: pluginManager.drawUI called from UI.draw in triune.lua')
-    assert_true(triuneContent:find('runtime.initPluginManager()', 1, true) ~= nil,
-        'Suite 86: runtime.initPluginManager called at startup in triune.lua')
+    -- 5. Source verification in mcac.lua
+    local mcacContent = readFile('MCAC/lua/mcac/init.lua')
+    assert_true(mcacContent:find('function runtime.initPluginManager()', 1, true) ~= nil,
+        'Suite 86: runtime.initPluginManager defined in mcac.lua')
+    assert_true(mcacContent:find('function UI.drawPluginsTab()', 1, true) ~= nil,
+        'Suite 86: UI.drawPluginsTab defined in mcac.lua')
+    assert_true(mcacContent:find("ImGui.BeginTabItem('Plugins##settingsPlugins')", 1, true) ~= nil,
+        'Suite 86: Plugins tab registered under Settings tab in mcac.lua')
+    assert_true(mcacContent:find('runtime.pluginManager.tick()', 1, true) ~= nil,
+        'Suite 86: pluginManager.tick called from main loop in mcac.lua')
+    assert_true(mcacContent:find('runtime.pluginManager.drawUI()', 1, true) ~= nil,
+        'Suite 86: pluginManager.drawUI called from UI.draw in mcac.lua')
+    assert_true(mcacContent:find('runtime.initPluginManager()', 1, true) ~= nil,
+        'Suite 86: runtime.initPluginManager called at startup in mcac.lua')
 
     -- 6. Unit Frames HUD Plugin verification
-    local ufFn = assert(loadfile('TAC/lua/tac/hud_unitframes.lua'))
+    local ufFn = assert(loadfile('MCAC/lua/mcac/hud_unitframes.lua'))
     local ufPlugin = ufFn()
     assert_eq(type(ufPlugin), 'table', 'Suite 86: hud_unitframes.lua returns plugin table')
     assert_eq(ufPlugin.id, 'hud_unitframes', 'Suite 86: hud_unitframes plugin id is correct')
@@ -10282,13 +10285,13 @@ do
     assert_true(okDestroy, 'Suite 86: hud_unitframes onDestroy cleans up cached snapshots: ' .. tostring(errDestroy))
 
     -- 7. In-Combat Toggle & Modal Configuration Popup Verification
-    assert_true(triuneContent:find("ImGui.TableSetupColumn('Cbt'", 1, true) ~= nil,
+    assert_true(mcacContent:find("ImGui.TableSetupColumn('Cbt'", 1, true) ~= nil,
         'Suite 86: Dedicated Combat column registered in Plugins table')
-    assert_true(triuneContent:find("ImGui.BeginPopupModal('Plugin Configuration##PluginConfigModal'", 1, true) ~= nil,
+    assert_true(mcacContent:find("ImGui.BeginPopupModal('Plugin Configuration##PluginConfigModal'", 1, true) ~= nil,
         'Suite 86: Centered modal popup dialog implemented for plugin configuration')
-    assert_true(triuneContent:find('ctrl.plugins[id].runInCombat = newRunInCombat', 1, true) ~= nil,
+    assert_true(mcacContent:find('ctrl.plugins[id].runInCombat = newRunInCombat', 1, true) ~= nil,
         'Suite 86: runInCombat preference saved upon toggle in Plugins table')
-    assert_true(triuneContent:find('ctrl.plugins[id].runInCombat = not p.runOutOfCombatOnly', 1, true) ~= nil,
+    assert_true(mcacContent:find('ctrl.plugins[id].runInCombat = not p.runOutOfCombatOnly', 1, true) ~= nil,
         'Suite 86: runInCombat persisted during pm.collectSettings()')
 end
 
@@ -10298,21 +10301,21 @@ end
 -- ============================================================================
 do
     print('--- Suite 87: Plugin Manager Hardening & Shipped Plugin Contract ---')
-    local triuneContent = readFile('TAC/lua/triune/init.lua')
-    local pAA87 = assert(loadfile('TAC/lua/tac/auto_accept.lua'))()
+    local mcacContent = readFile('MCAC/lua/mcac/init.lua')
+    local pAA87 = assert(loadfile('MCAC/lua/mcac/auto_accept.lua'))()
 
     -- 1. Manager hardening: live ctrl, single fiber factory, safe rescan, draw-error isolation
-    assert_true(triuneContent:find('function pm.createFiber(p)', 1, true) ~= nil,
+    assert_true(mcacContent:find('function pm.createFiber(p)', 1, true) ~= nil,
         'Suite 87: fiber creation is factored into pm.createFiber')
-    assert_true(triuneContent:find('function pm.restartAll()', 1, true) ~= nil,
+    assert_true(mcacContent:find('function pm.restartAll()', 1, true) ~= nil,
         'Suite 87: pm.restartAll re-runs plugin lifecycles without touching disk')
-    assert_true(triuneContent:find('runtime.pluginManager.restartAll()', 1, true) ~= nil,
+    assert_true(mcacContent:find('runtime.pluginManager.restartAll()', 1, true) ~= nil,
         'Suite 87: main loop restarts plugins after a character swap replaces ctrl')
-    assert_true(triuneContent:find('function pm.drawPluginSettings(id)', 1, true) ~= nil,
+    assert_true(mcacContent:find('function pm.drawPluginSettings(id)', 1, true) ~= nil,
         'Suite 87: pm.drawPluginSettings lets core sub-tabs delegate to a plugin')
-    assert_true(triuneContent:find("pm.reportError(p, 'onDrawUI', err)", 1, true) ~= nil,
+    assert_true(mcacContent:find("pm.reportError(p, 'onDrawUI', err)", 1, true) ~= nil,
         'Suite 87: onDrawUI failures flag the plugin as Error instead of retrying every frame')
-    assert_true(triuneContent:find('if not fileSet[low] and not loadedFiles[low] then', 1, true) ~= nil,
+    assert_true(mcacContent:find('if not fileSet[low] and not loadedFiles[low] then', 1, true) ~= nil,
         'Suite 87: pm.discover skips files that are already loaded (rescan never double-inits)')
 
     -- The core API resolves ctrl live through __index; emulate the exact pattern
@@ -10331,9 +10334,9 @@ do
         liveCtrl = { a = 2 }
         assert_eq(api.ctrl.a, 2, 'Suite 87: core API sees a replaced ctrl without re-init')
         assert_eq(api.VERSION, 'x', 'Suite 87: static core API fields still resolve normally')
-        assert_true(triuneContent:find('ctrl       = function() return ctrl end', 1, true) ~= nil,
+        assert_true(mcacContent:find('ctrl       = function() return ctrl end', 1, true) ~= nil,
             'Suite 87: pm.getCoreApi exposes ctrl via a live getter')
-        assert_true(triuneContent:find('if pm.coreApi then return pm.coreApi end', 1, true) ~= nil,
+        assert_true(mcacContent:find('if pm.coreApi then return pm.coreApi end', 1, true) ~= nil,
             'Suite 87: pm.getCoreApi returns one shared API table')
     end
 
@@ -10343,12 +10346,12 @@ do
 
     -- 3. HUD plugins respect saved visibility and the core visual toggle
     do
-    local ufSrc = readFile('TAC/lua/tac/hud_unitframes.lua')
+    local ufSrc = readFile('MCAC/lua/mcac/hud_unitframes.lua')
     assert_true(ufSrc:find('core.ctrl.show_unit_frames = true', 1, true) == nil,
         'Suite 87: hud_unitframes no longer forces the window open on init')
     assert_true(ufSrc:find('(now - lastRefreshAt) < REFRESH_INTERVAL', 1, true) ~= nil,
         'Suite 87: hud_unitframes throttles TLO snapshots on the render pass')
-    local fdSrc = readFile('TAC/lua/tac/floating_damage.lua')
+    local fdSrc = readFile('MCAC/lua/mcac/floating_damage.lua')
     assert_true(fdSrc:find('show_crit_floaters', 1, true) ~= nil,
         'Suite 87: floating_damage honors ctrl.show_crit_floaters')
     end
@@ -10378,7 +10381,7 @@ do
         { file = 'gm_commands',     id = 'gm_commands' },
     }
     for _, sp in ipairs(shipped) do
-        local fn = assert(loadfile('TAC/lua/tac/' .. sp.file .. '.lua'))
+        local fn = assert(loadfile('MCAC/lua/mcac/' .. sp.file .. '.lua'))
         local okP, inst = pcall(fn)
         assert_true(okP and type(inst) == 'table', 'Suite 87: ' .. sp.file .. '.lua returns a plugin table')
         assert_eq(inst.id, sp.id, 'Suite 87: ' .. sp.file .. ' id matches filename')
@@ -10640,7 +10643,7 @@ do
         assert_eq(aa.status, 'Active', 'Suite 88: reload recovers the plugin after a hook error')
     end
 
-    -- 11. Spellbook plugin (was the standalone triune_spellbook.lua script)
+    -- 11. Spellbook plugin (was the standalone mcac_spellbook.lua script)
     do
         local sb = pm.plugins.spellbook
         assert_true(sb ~= nil and sb.enabled, 'Suite 88: spellbook plugin loaded and enabled')
@@ -10675,12 +10678,12 @@ do
         assert_eq(memCalls[1].bypass, true, 'Suite 88: bypass-scribed option is passed through')
         assert_true(next(sb.instance.state.pendingQueue) == nil, 'Suite 88: queue entry cleared after memorizing')
 
-        local sbSrc = readFile('TAC/lua/tac/spellbook.lua')
+        local sbSrc = readFile('MCAC/lua/mcac/spellbook.lua')
         for _, dup in ipairs({ 'local function pushTheme', 'local function getSpellbookMap', 'local function tryMem', 'local function detectClasses', 'local function loadData', 'mq.imgui.init' }) do
             assert_true(sbSrc:find(dup, 1, true) == nil, 'Suite 88: spellbook plugin no longer duplicates core code: ' .. dup)
         end
-        assert_true(io.open('TAC/lua/triune_spellbook.lua', 'r') == nil, 'Suite 88: standalone triune_spellbook.lua was removed')
-        assert_true(src:find("UI.toggleTool('triune_spellbook')", 1, true) == nil, 'Suite 88: core no longer launches triune_spellbook via /lua run')
+        assert_true(io.open('MCAC/lua/mcac_spellbook.lua', 'r') == nil, 'Suite 88: standalone mcac_spellbook.lua was removed')
+        assert_true(src:find("UI.toggleTool('mcac_spellbook')", 1, true) == nil, 'Suite 88: core no longer launches mcac_spellbook via /lua run')
     end
 end
 
@@ -10734,7 +10737,7 @@ do
     end
 
     local function loadPlugin(file)
-        local fn = assert(loadfile('TAC/lua/tac/' .. file .. '.lua'))
+        local fn = assert(loadfile('MCAC/lua/mcac/' .. file .. '.lua'))
         local origPrint = print
         print = quietPrint
         local ok, inst = pcall(fn)
@@ -10747,15 +10750,15 @@ do
 
     -- 1. No plugin blocks the core: mq.delay / mq.doevents / mq.imgui / own theme are gone
     for _, f in ipairs({ 'cursor', 'dps', 'inventory', 'buffbot', 'map', 'chat' }) do
-        local psrc = readFile('TAC/lua/tac/' .. f .. '.lua')
+        local psrc = readFile('MCAC/lua/mcac/' .. f .. '.lua')
         for _, bad in ipairs({ 'mq.delay(', 'mq.doevents()', 'mq.imgui.init', 'mq.exit(', 'local function pushTheme', 'local function popTheme', 'require(' }) do
             assert_true(psrc:find(bad, 1, true) == nil, 'Suite 89: ' .. f .. '.lua does not use ' .. bad)
         end
         assert_true(psrc:find('core.pushTheme()', 1, true) ~= nil, 'Suite 89: ' .. f .. '.lua uses the core theme')
-        assert_true(io.open('TAC/lua/triune_' .. (f == 'inventory' and 'inv' or f) .. '.lua', 'r') == nil, 'Suite 89: standalone triune_' .. f .. ' script was removed')
+        assert_true(io.open('MCAC/lua/mcac_' .. (f == 'inventory' and 'inv' or f) .. '.lua', 'r') == nil, 'Suite 89: standalone mcac_' .. f .. ' script was removed')
     end
     for _, f in ipairs({ 'inventory', 'buffbot' }) do
-        local psrc = readFile('TAC/lua/tac/' .. f .. '.lua')
+        local psrc = readFile('MCAC/lua/mcac/' .. f .. '.lua')
         assert_true(psrc:find('return core.delay(ms, cond)', 1, true) ~= nil, 'Suite 89: ' .. f .. ' waits through the fiber-aware core.delay')
         assert_true(psrc:find('hasThread          = true', 1, true) ~= nil, 'Suite 89: ' .. f .. ' runs in a plugin fiber')
     end
@@ -10765,7 +10768,7 @@ do
         assert_true(src:find('        ' .. key .. ' ', 1, true) ~= nil, 'Suite 89: defaultCtrl seeds ' .. key)
         assert_true(src:find('if c.' .. key .. ' == nil then c.' .. key .. ' = false end', 1, true) ~= nil, 'Suite 89: sanitize seeds ' .. key)
     end
-    for _, gone in ipairs({ "UI.toggleTool('triune_map')", "UI.toggleTool('triune_dps'", "UI.toggleTool('triune_cursor')", "UI.toggleTool('triune_buffbot')", "/lua run triune_inv", "/lua run triune_buttons", "cmd == 'cursorui'", "cmd == 'buffbot'", "cmd == 'dpsparser'", "cmd == 'triunemap'" }) do
+    for _, gone in ipairs({ "UI.toggleTool('mcac_map')", "UI.toggleTool('mcac_dps'", "UI.toggleTool('mcac_cursor')", "UI.toggleTool('mcac_buffbot')", "/lua run mcac_inv", "/lua run mcac_buttons", "cmd == 'cursorui'", "cmd == 'buffbot'", "cmd == 'dpsparser'", "cmd == 'mcacmap'" }) do
         assert_true(src:find(gone, 1, true) == nil, 'Suite 89: core no longer contains ' .. gone)
     end
     assert_true(src:find('delay                 = function(ms, cond) return pm.delay(ms, cond) end', 1, true) ~= nil, 'Suite 89: core API exports delay')
@@ -10835,7 +10838,7 @@ do
         for _ in pairs(rec.events) do evCount = evCount + 1 end
         assert_eq(evCount, 20, 'Suite 89: dps registers its 20 combat-log events')
         assert_eq(#dps.registeredEvents(), 20, 'Suite 89: dps tracks registered event names')
-        assert_true(rec.binds['/dps'] and rec.binds['/triunedps'], 'Suite 89: dps binds /dps and /triunedps')
+        assert_true(rec.binds['/dps'] and rec.binds['/mcacdps'], 'Suite 89: dps binds /dps and /mcacdps')
         assert_eq(ctrl.show_dps, false, 'Suite 89: dps seeds show_dps = false')
         assert_true(dps.onCommand('dps', { 'dps' }), 'Suite 89: /ac dps handled by the plugin')
         assert_eq(ctrl.show_dps, true, 'Suite 89: /ac dps opens the window')
@@ -10861,7 +10864,7 @@ do
         evCount = 0
         for _ in pairs(rec.events) do evCount = evCount + 1 end
         assert_eq(evCount, 0, 'Suite 89: dps unregisters its events on destroy')
-        assert_true(rec.binds['/dps'] == nil and rec.binds['/triunedps'] == nil, 'Suite 89: dps unbinds /dps on destroy')
+        assert_true(rec.binds['/dps'] == nil and rec.binds['/mcacdps'] == nil, 'Suite 89: dps unbinds /dps on destroy')
         print = origPrint
     end
 
@@ -10936,8 +10939,8 @@ do
         ctrl.zone_waypoints = { gfaydark = { waypoints = { { x = 5, y = 6, z = 7, name = 'Orc Hill' } }, waypoint_radius = 25, waypoint_loop = true } }
         ctrl.zone_hazards = { gfaydark = { { x = 9, y = 9, z = 9, hits = 4 } } }
         map.state.currentZoneShort = 'gfaydark'
-        map.syncTriuneLoadout()
-        local td = map.state.triuneData
+        map.syncMcacLoadout()
+        local td = map.state.mcacData
         assert_eq(td.isLoaded, true, 'Suite 89: map sync reads the live core ctrl')
         assert_eq(td.campLoc and td.campLoc.x, 10, 'Suite 89: map sync mirrors camp_loc')
         assert_eq(td.campRadius, 80, 'Suite 89: map sync mirrors camp_radius')
@@ -10951,7 +10954,7 @@ do
         assert_eq(td.zoneHazards[1].hits, 4, 'Suite 89: hazard hit count mirrored')
         ctrl.waypoints = { { x = 1, y = 1, z = 1, name = 'Char WP' }, { x = 2, y = 2, z = 2 } }
         ctrl.use_waypoints = true
-        map.syncTriuneLoadout()
+        map.syncMcacLoadout()
         assert_eq(#td.waypoints, 2, 'Suite 89: character waypoints take precedence over zone waypoints')
         assert_eq(td.waypoints[2].name, 'WP 2', 'Suite 89: unnamed character waypoint gets a default name')
         assert_true(map.onCommand('track'), 'Suite 89: /ac track handled by the map plugin')
@@ -10960,8 +10963,8 @@ do
         assert_true(map.onCommand('map'), 'Suite 89: /ac map handled')
         assert_eq(ctrl.show_map, false, 'Suite 89: /ac map toggles the window closed')
         assert_eq(map.onCommand('cursorui'), false, 'Suite 89: map ignores other commands')
-        local mapSrc = readFile('TAC/lua/tac/map.lua')
-        for _, gone in ipairs({ 'triuneLoadoutCandidates', 'findTriuneLoadoutFile', '__zoneWaypoints', 'loadfile(perCharPath)' }) do
+        local mapSrc = readFile('MCAC/lua/mcac/map.lua')
+        for _, gone in ipairs({ 'mcacLoadoutCandidates', 'findMcacLoadoutFile', '__zoneWaypoints', 'loadfile(perCharPath)' }) do
             assert_true(mapSrc:find(gone, 1, true) == nil, 'Suite 89: map plugin dropped loadout-file discovery: ' .. gone)
         end
         print = origPrint
@@ -11052,7 +11055,7 @@ do
         map.tick()
         assert_eq(reads.pathExists, 0, 'Suite 89: no per-NPC navmesh queries from the scan or the tick')
         assert_true(map.navState.checkQueue == nil and map.navState.cache == nil, 'Suite 89: the PathExists batch queue is gone')
-        local mapSrc2 = readFile('TAC/lua/tac/map.lua')
+        local mapSrc2 = readFile('MCAC/lua/mcac/map.lua')
         for _, gone in ipairs({ 'processNavBatch', 'pathableOnly', 'COLOR_MODE_OPTIONS', 'Navmesh Status', '[CHECKING]' }) do
             assert_true(mapSrc2:find(gone, 1, true) == nil, 'Suite 89: map plugin dropped navmesh validation: ' .. gone)
         end
@@ -11062,7 +11065,7 @@ do
     -- 8. pm.delay: yields the fiber until the condition / deadline, mq.delay outside a fiber
     do
         -- Plugins loaded by the manager below persist settings under
-        -- mq.configDir on disable (map writes triune_map_config.lua): point it
+        -- mq.configDir on disable (map writes mcac_map_config.lua): point it
         -- at the system temp dir so the run never writes into the repo.
         local mockMq = {
             configDir = (function()
@@ -11256,7 +11259,7 @@ do
         for _, gone in ipairs({ "'Map##hdrMap'", "'DPS Parser##hdrDPS'", "'Cursor Manager##hdrCursor'", "'Inv Manager##hdrInv'", "'Open Spellbook##hdrBook'", "'Gems##hdrGems'", "'XTarget##hdrXTarget'" }) do
             assert_true(src:find(gone, 1, true) == nil, 'Suite 89: hardcoded header button removed: ' .. gone)
         end
-        assert_true(src:find("ImGui.BeginTable('TriunePluginsTable', 8, tblFlags)", 1, true) ~= nil, 'Suite 89: Plugins table has the compact 8-column layout')
+        assert_true(src:find("ImGui.BeginTable('MCACPluginsTable', 8, tblFlags)", 1, true) ~= nil, 'Suite 89: Plugins table has the compact 8-column layout')
         assert_true(src:find("ImGui.TableSetupColumn('Uses', ImGuiTableColumnFlags.WidthFixed, UI.px(105))", 1, true) ~= nil, 'Suite 89: Uses column declared')
         assert_true(src:find("ImGui.TableSetupColumn('Hdr', ImGuiTableColumnFlags.WidthFixed, UI.px(30))", 1, true) ~= nil, 'Suite 89: Header button column declared')
 
@@ -11300,7 +11303,7 @@ do
 
         -- 11. No plugin launches a removed standalone script; the gem bar opens the spellbook plugin window
         for _, f in ipairs({ 'hud_spellgems', 'hud_cooldowns', 'hud_unitframes', 'hud_group', 'hud_effects', 'hud_xtarget', 'spellbook', 'auto_aa', 'auto_accept', 'floating_damage', 'map', 'dps', 'inventory', 'buffbot', 'cursor' }) do
-            assert_true(readFile('TAC/lua/tac/' .. f .. '.lua'):find("toggleTool('triune_", 1, true) == nil, 'Suite 89: ' .. f .. ' does not launch a removed standalone script')
+            assert_true(readFile('MCAC/lua/mcac/' .. f .. '.lua'):find("toggleTool('mcac_", 1, true) == nil, 'Suite 89: ' .. f .. ' does not launch a removed standalone script')
         end
         W.ctrl.show_spellbook = false
         W.gems = pm.plugins.hud_spellgems and pm.plugins.hud_spellgems.instance
@@ -11344,7 +11347,7 @@ do
     }
     local origPrint = print
     print = quietPrint
-    local fn = assert(loadfile('TAC/lua/tac/auto_aa.lua'))
+    local fn = assert(loadfile('MCAC/lua/mcac/auto_aa.lua'))
     local ok, aaPlugin = pcall(fn)
     assert_true(ok and type(aaPlugin) == 'table', 'Suite 90: auto_aa.lua loads')
     aaPlugin.onInit(core)
@@ -11375,7 +11378,7 @@ do
     assert_eq(AA.hasFireworksAA(17788), true, 'Suite 90: AltAbilityReady counts as proof of ownership')
 
     -- Source guard: the auto-summon path calls the ownership check
-    local aaSrc = readFile('TAC/lua/tac/auto_aa.lua')
+    local aaSrc = readFile('MCAC/lua/mcac/auto_aa.lua')
     assert_true(aaSrc:find('if not AA.hasFireworksAA(aaId) then', 1, true) ~= nil, 'Suite 90: checkAutoSummonFireworks gates on AA.hasFireworksAA')
 
     -- Post-purchase summon is deferred, not fired on the Train click
@@ -11483,7 +11486,7 @@ do
     -- os.clock(), which is still tiny this early in the run: push it ahead.
     local origClock = os.clock
     os.clock = function() return origClock() + 1000 end
-    local aaPlugin = assert(loadfile('TAC/lua/tac/auto_aa.lua'))()
+    local aaPlugin = assert(loadfile('MCAC/lua/mcac/auto_aa.lua'))()
     aaPlugin.onInit(core)
     local AA = aaPlugin.AA
     assert_true(aaPlugin.onLoadoutSaved == nil, 'Suite 91: the plugin has no loadout-save hook any more')
@@ -11548,7 +11551,7 @@ end
 
 
 -- ============================================================================
--- Suite 92: Multi-pet tracking (real triune.lua functions on a mock spawn world)
+-- Suite 92: Multi-pet tracking (real mcac.lua functions on a mock spawn world)
 -- ============================================================================
 do
     print('--- Suite 92: Multi-pet tracking ---')
@@ -12098,8 +12101,8 @@ end
 -- Suite 92: Random files dropped into the plugin folder are rejected safely
 -- ============================================================================
 do
-    print('--- Suite 92: Non-plugin files in lua/tac ---')
-    local S = { printed = {}, junkDir = (os.getenv('TMPDIR') or '/tmp') .. '/triune_junk_plugins' }
+    print('--- Suite 92: Non-plugin files in lua/mcac ---')
+    local S = { printed = {}, junkDir = (os.getenv('TMPDIR') or '/tmp') .. '/mcac_junk_plugins' }
     local quietPrint = function(...) S.printed[#S.printed + 1] = table.concat({ ... }, ' ') end
     local noop = function() end
     os.execute('mkdir -p "' .. S.junkDir .. '"')
@@ -12177,7 +12180,7 @@ do
         end
     end
     for _, f in ipairs({ 'buttons', 'dps', 'hud_group', 'hud_effects', 'hud_unitframes', 'hud_xtarget', 'hud_cooldowns', 'inventory', 'map', 'cursor', 'buffbot', 'auto_aa', 'auto_accept', 'floating_damage', 'spellbook', 'hud_spellgems' }) do
-        local body = readFile('TAC/lua/tac/' .. f .. '.lua')
+        local body = readFile('MCAC/lua/mcac/' .. f .. '.lua')
         local declared = S.ids(pm.plugins[f].uses)
         if body:find('core.boxnet', 1, true) or body:find("rawget(core, 'boxnet')", 1, true) then
             assert_true(declared:find('boxnet', 1, true) ~= nil, 'Suite 92: ' .. f .. ' touches core.boxnet so it must declare uses boxnet')
@@ -12202,12 +12205,12 @@ do
     assert_eq(S.delays, 0, 'Suite 92: the script main loop never ran (mq.delay guarded)')
     assert_true(pm.scripts['standalone_script.lua'] ~= nil, 'Suite 92: standalone script gets a Standalone Scripts entry')
     assert_eq(pm.loadErrors['standalone_script.lua'], nil, 'Suite 92: a runnable script is not listed as a load failure')
-    assert_eq(pm.scripts['standalone_script.lua'].runName, 'triune_junk_plugins/standalone_script', 'Suite 92: run name is <folder>/<file> when the folder is outside mq.luaDir')
+    assert_eq(pm.scripts['standalone_script.lua'].runName, 'mcac_junk_plugins/standalone_script', 'Suite 92: run name is <folder>/<file> when the folder is outside mq.luaDir')
     assert_eq(mockMq.delay ~= nil and S.delays, 0, 'Suite 92: guards restored mq.delay afterwards')
     mockMq.delay(1)
     assert_eq(S.delays, 1, 'Suite 92: original mq.delay restored after the load attempt')
 
-    -- 1b. A script that calls mq.exit while loading cannot kill Triune's script
+    -- 1b. A script that calls mq.exit while loading cannot kill MCAC's script
     S.exits = 0
     mockMq.exit = function() S.exits = S.exits + 1 end
     S.path = writeJunk('exits_at_load.lua', "local mq = require('mq')\nmq.exit()\n")
@@ -12271,12 +12274,12 @@ do
     S.entry = pm.scripts['standalone_script.lua']
     assert_eq(pm.isScriptRunning(S.entry), false, 'Suite 92: script reported stopped')
     assert_eq(pm.toggleScript(S.entry), 'started', 'Suite 92: Run starts the script')
-    assert_eq(S.cmds[#S.cmds], '/lua run triune_junk_plugins/standalone_script', 'Suite 92: Run issues /lua run with the folder-relative name')
-    assert_eq(S.lastLookup, 'triune_junk_plugins/standalone_script', 'Suite 92: status looked up under the same run name')
+    assert_eq(S.cmds[#S.cmds], '/lua run mcac_junk_plugins/standalone_script', 'Suite 92: Run issues /lua run with the folder-relative name')
+    assert_eq(S.lastLookup, 'mcac_junk_plugins/standalone_script', 'Suite 92: status looked up under the same run name')
     S.running = true
     assert_eq(pm.isScriptRunning(S.entry), true, 'Suite 92: script reported running')
     assert_eq(pm.toggleScript(S.entry), 'stopped', 'Suite 92: Stop stops a running script')
-    assert_eq(S.cmds[#S.cmds], '/lua stop triune_junk_plugins/standalone_script', 'Suite 92: Stop issues /lua stop')
+    assert_eq(S.cmds[#S.cmds], '/lua stop mcac_junk_plugins/standalone_script', 'Suite 92: Stop issues /lua stop')
     -- Header button + button name for a standalone script (ctrl.scripts[file]); the header draws it
     S.saves = 0
     rt.saveLoadout = function() S.saves = S.saves + 1 end
@@ -12305,10 +12308,10 @@ do
     assert_eq(S.buttons[#S.buttons], 'Junk##hdrScr_standalone_script.lua', 'Suite 92: header button carries the custom name and a per-file id')
     S.pressed = 'Junk##hdrScr_standalone_script.lua'
     pm.drawHeaderButtons(1)
-    assert_eq(S.cmds[#S.cmds], '/lua run triune_junk_plugins/standalone_script', 'Suite 92: pressing the header button runs the script')
+    assert_eq(S.cmds[#S.cmds], '/lua run mcac_junk_plugins/standalone_script', 'Suite 92: pressing the header button runs the script')
     S.running = true
     pm.drawHeaderButtons(1)
-    assert_eq(S.cmds[#S.cmds], '/lua stop triune_junk_plugins/standalone_script', 'Suite 92: pressing it while running stops the script')
+    assert_eq(S.cmds[#S.cmds], '/lua stop mcac_junk_plugins/standalone_script', 'Suite 92: pressing it while running stops the script')
     S.pressed = nil
     env.ImGui.Button = function() return false end
     pm.setScriptHeaderButton(S.entry, false)
@@ -12317,8 +12320,8 @@ do
     mockMq.cmd = noop
     -- run names resolve relative to mq.luaDir when the folder lives under it
     mockMq.luaDir = '/mq/lua'
-    assert_eq(pm.scriptRunName('/mq/lua/tac/foo.lua'), 'tac/foo', 'Suite 92: run name relative to mq.luaDir')
-    assert_eq(pm.scriptRunName('C:\\MQ\\lua\\tac\\bar.lua'), 'tac/bar', 'Suite 92: run name strips the drive path outside luaDir (folder/file)')
+    assert_eq(pm.scriptRunName('/mq/lua/mcac/foo.lua'), 'mcac/foo', 'Suite 92: run name relative to mq.luaDir')
+    assert_eq(pm.scriptRunName('C:\\MQ\\lua\\mcac\\bar.lua'), 'mcac/bar', 'Suite 92: run name strips the drive path outside luaDir (folder/file)')
     mockMq.luaDir = nil
 
     -- 5. A minimal valid plugin still loads (hooks only, no id -> filename id), and clears its error entry
@@ -12350,7 +12353,7 @@ do
     assert_eq(S.imguiInits, 0, 'Suite 92: rescan does not re-run a known standalone script chunk')
     assert_true(pm.scripts['standalone_script.lua'] ~= nil, 'Suite 92: known script entry survives a rescan')
     assert_true(src:find("'| Standalone scripts: %d'", 1, true) ~= nil, 'Suite 92: Plugins page shows the standalone script count')
-    assert_true(src:find("ImGui.BeginTable('TriuneScriptsTable', 5, tblFlags)", 1, true) ~= nil, 'Suite 92: Plugins page has the Standalone Scripts table (with Hdr / Button Name)')
+    assert_true(src:find("ImGui.BeginTable('MCACScriptsTable', 5, tblFlags)", 1, true) ~= nil, 'Suite 92: Plugins page has the Standalone Scripts table (with Hdr / Button Name)')
     assert_true(src:find("ImGui.TableSetupColumn('Hdr', ImGuiTableColumnFlags.WidthFixed, UI.px(30))", 1, true) ~= nil and src:find("ImGui.TableSetupColumn('Button Name'", 1, true) ~= nil, 'Suite 92: Standalone Scripts table has the header button and name columns')
     assert_true(src:find("'| Failed to load: %d'", 1, true) ~= nil, 'Suite 92: Plugins page shows the failed-file count')
     assert_true(src:find('Files in the plugin folder that could not be loaded:', 1, true) ~= nil, 'Suite 92: Plugins page lists failed files')
@@ -12427,7 +12430,7 @@ end
             return mod
         end
         local function senderOf(entry)
-            return { character = entry.id.character, server = entry.id.server, account = entry.id.account, pid = entry.id.pid, mailbox = entry.mailbox, script = 'triune' }
+            return { character = entry.id.character, server = entry.id.server, account = entry.id.account, pid = entry.id.pid, mailbox = entry.mailbox, script = 'mcac' }
         end
         function bus.flush()
             local guard = 0
@@ -12552,11 +12555,11 @@ end
             if k == 'myClasses' then return { 'WAR', 'CLR', 'ENC' } end
             return nil
         end })
-        local inst = assert(loadfile('TAC/lua/tac/boxnet.lua'))()
+        local inst = assert(loadfile('MCAC/lua/mcac/boxnet.lua'))()
         if opts.noActors then
             inst.actorsModule = false
         else
-            inst.actorsModule = bus.client({ character = name, server = 'triune', account = 'acct', pid = box.pid })
+            inst.actorsModule = bus.client({ character = name, server = 'mcac', account = 'acct', pid = box.pid })
         end
         inst.clock = function() return clock.t end
         inst.registry = {} -- each simulated box is its own "Lua state"
@@ -12649,7 +12652,7 @@ end
     assert_eq(table.concat(bobSeenByA.hb.classes, '/'), 'WAR/CLR/ENC', 'Suite 95: heartbeat carries the trio')
     assert_eq(bobSeenByA.hb.running, false, 'Suite 95: heartbeat carries running state')
     assert_eq(bobSeenByA.pid, 200, 'Suite 95: sender pid recorded on the peer')
-    assert_eq(bobSeenByA.server, 'triune', 'Suite 95: sender server recorded on the peer')
+    assert_eq(bobSeenByA.server, 'mcac', 'Suite 95: sender server recorded on the peer')
     assert_eq(bus.nonSerializable, 0, 'Suite 95: nothing non-serializable was ever handed to actors')
 
     -- 3. Heartbeat cadence: throttled while idle, immediate on a state change
@@ -13047,7 +13050,7 @@ end
     assert_true(src:find("'boxnet.lua',", 1, true) ~= nil, 'Suite 95: core discover() probes boxnet.lua')
     assert_true(src:find("cmd = '/ac net [all|zone|group|Name] [command]'", 1, true) ~= nil, 'Suite 95: help table documents /ac net')
     assert_true(src:find('|buffbot|net|btn|update|clearcursor|', 1, true) ~= nil, 'Suite 95: /ac usage line lists net')
-    local bnSrc = readFile('TAC/lua/tac/boxnet.lua')
+    local bnSrc = readFile('MCAC/lua/mcac/boxnet.lua')
     assert_true(bnSrc:find('mq.delay(', 1, true) == nil and bnSrc:find('core.delay(', 1, true) == nil, 'Suite 95: boxnet never calls mq.delay / core.delay (forbidden in actor handlers)')
     assert_true(bnSrc:find('core.pushTheme()', 1, true) ~= nil, 'Suite 95: window uses the core theme')
 
@@ -13193,7 +13196,7 @@ end)()
         bind = function(name, fn) binds[name] = fn end,
         unbind = function(name) binds[name] = nil end,
         TLO = {
-            EverQuest = { Server = function() return 'triune' end },
+            EverQuest = { Server = function() return 'mcac' end },
             Me = {
                 DisplayName = function() return 'Alice' end,
                 CleanName = function() return 'Alice' end,
@@ -13223,7 +13226,7 @@ end)()
         return nil
     end })
 
-    local inst = assert(loadfile('TAC/lua/tac/buttons.lua'))()
+    local inst = assert(loadfile('MCAC/lua/mcac/buttons.lua'))()
     inst.configPathOverride = tmpPath
     inst.bmConfigPathOverride = bmPath
     local T = inst._
@@ -13240,7 +13243,7 @@ end)()
     inst.onInit(core)
     local db = T.getDb()
     assert_eq(ctrl.show_buttons, true, 'Suite 96: hotbars visible by default')
-    assert_eq(T.charKey(), 'triune_Alice', 'Suite 96: character key is Server_Name (Button Master style)')
+    assert_eq(T.charKey(), 'mcac_Alice', 'Suite 96: character key is Server_Name (Button Master style)')
     assert_true(db.sets.Primary ~= nil and db.sets.Movement ~= nil, 'Suite 96: default sets created')
     assert_eq(#T.hotbars(), 1, 'Suite 96: one default hotbar')
     assert_eq(T.hotbars()[1].sets[1], 'Primary', 'Suite 96: default hotbar shows Primary')
@@ -13382,7 +13385,7 @@ end)()
     assert_eq(uc.total, 7, 'Suite 96: with no total the largest remaining seen becomes the total')
 
     -- 9. Share strings: Button Master format, round-trip, base64
-    assert_eq(T.b64dec(T.b64enc('Triune Hot Buttons!')), 'Triune Hot Buttons!', 'Suite 96: base64 round-trip')
+    assert_eq(T.b64dec(T.b64enc('MCAC Hot Buttons!')), 'MCAC Hot Buttons!', 'Suite 96: base64 round-trip')
     local colored = T.addButton({ label = 'Shared One', cmd = '/say hi', icon = 123, iconType = 'Item', buttonColor = { 10, 20, 30 }, textColor = { 255, 255, 0 }, timerType = 'AA', timerKey = 'Burst of Power' }, false)
     local share = T.shareButton(colored)
     assert_type(share, 'string', 'Suite 96: shareButton produces a string')
@@ -13394,7 +13397,7 @@ end)()
     assert_eq(decoded.Button.Cooldown, 'Burst of Power', 'Suite 96: BM Cooldown carries the timer key')
     assert_eq(decoded.Button.IconType, 'Item', 'Suite 96: BM IconType carried')
     local back = T.buttonFromBm(decoded.Button)
-    assert_true(back.icon == 123 and back.iconType == 'Item' and back.textColor[2] == 255 and back.timerType == 'AA' and back.timerKey == 'Burst of Power', 'Suite 96: buttonFromBm restores the Triune fields')
+    assert_true(back.icon == 123 and back.iconType == 'Item' and back.textColor[2] == 255 and back.timerType == 'AA' and back.timerKey == 'Burst of Power', 'Suite 96: buttonFromBm restores the MCAC fields')
     local nBefore = 0
     for _ in pairs(db.buttons) do nBefore = nBefore + 1 end
     local okImp = T.importShare(decoded, nil)
@@ -13426,8 +13429,8 @@ end)()
   },
   Sets = { Primary = { 'Button_1', 'Button_2' }, Movement = { 'Button_2' } },
   Characters = {
-    triune_Alice = { Windows = { { Title = 'BM Bar', Visible = true, Locked = true, CompactMode = true, ButtonSize = 5, Font = 12, Sets = { 'Primary', 'Movement' } } } },
-    triune_Bob = { Windows = { { Sets = { 'Primary' } } } },
+    mcac_Alice = { Windows = { { Title = 'BM Bar', Visible = true, Locked = true, CompactMode = true, ButtonSize = 5, Font = 12, Sets = { 'Primary', 'Movement' } } } },
+    mcac_Bob = { Windows = { { Sets = { 'Primary' } } } },
   },
 }]])
     bmf:close()
@@ -13440,7 +13443,7 @@ end)()
     assert_eq(bmBar.sets[1], 'Primary 3', 'Suite 96: BM window sets remapped to the imported names')
     local bmBurn = T.buttonAt('Primary 3', 1)
     assert_true(bmBurn ~= nil and bmBurn.icon == 42 and bmBurn.timerType == 'Gem' and bmBurn.timerKey == '2' and bmBurn.showLabel == false, 'Suite 96: BM button fields converted')
-    assert_eq(db.characters.triune_Bob, nil, 'Suite 96: other characters\' BM windows are not imported')
+    assert_eq(db.characters.mcac_Bob, nil, 'Suite 96: other characters\' BM windows are not imported')
     local okBad, errBad = T.importButtonMasterConfig('/nonexistent/ButtonMaster.lua')
     assert_true(okBad == false and errBad:find('Could not read', 1, true) ~= nil, 'Suite 96: missing BM config reported')
 
@@ -13455,7 +13458,7 @@ end)()
     local bak = io.open(tmpPath .. '.bak', 'r')
     assert_true(bak ~= nil, 'Suite 96: a .bak of the previous library is kept')
     if bak then bak:close() end
-    T.setDb({ buttons = { Bad = 'nope', Ok = { label = 'x', cmd = '/x', timerType = 'Bogus', icon = '77' } }, sets = { S = { [1] = 'Ok', [2] = 'Missing', foo = 'Ok' } }, characters = { triune_Alice = { hotbars = { { sets = { 'S', 'Nope' }, buttonSize = 99, alpha = 5 } } } } })
+    T.setDb({ buttons = { Bad = 'nope', Ok = { label = 'x', cmd = '/x', timerType = 'Bogus', icon = '77' } }, sets = { S = { [1] = 'Ok', [2] = 'Missing', foo = 'Ok' } }, characters = { mcac_Alice = { hotbars = { { sets = { 'S', 'Nope' }, buttonSize = 99, alpha = 5 } } } } })
     local nd = T.getDb()
     assert_nil(nd.buttons.Bad, 'Suite 96: normalizeDb drops non-table buttons')
     assert_eq(nd.buttons.Ok.timerType, 'None', 'Suite 96: normalizeDb resets unknown timer types')
@@ -13466,11 +13469,11 @@ end)()
     assert_true(nhb.buttonSize == 12 and nhb.alpha == 1 and #nhb.sets == 1 and nhb.title ~= nil, 'Suite 96: normalizeDb clamps hotbar options and drops unknown sets')
 
     -- 12. Copy hotbars from another character
-    T.getDb().characters.triune_Bob = { hotbars = { T.newHotbar('Bob Bar'), T.newHotbar('Bob Bar 2') } }
-    assert_eq(T.copyHotbarsFrom('triune_Bob'), true, 'Suite 96: copyHotbarsFrom copies another character')
+    T.getDb().characters.mcac_Bob = { hotbars = { T.newHotbar('Bob Bar'), T.newHotbar('Bob Bar 2') } }
+    assert_eq(T.copyHotbarsFrom('mcac_Bob'), true, 'Suite 96: copyHotbarsFrom copies another character')
     assert_true(#T.hotbars() == 2 and T.hotbars()[1].title == 'Bob Bar', 'Suite 96: copied hotbars replace ours')
-    assert_eq(T.copyHotbarsFrom('triune_Alice'), false, 'Suite 96: cannot copy from self')
-    assert_eq(T.copyHotbarsFrom('triune_Nobody'), false, 'Suite 96: unknown character rejected')
+    assert_eq(T.copyHotbarsFrom('mcac_Alice'), false, 'Suite 96: cannot copy from self')
+    assert_eq(T.copyHotbarsFrom('mcac_Nobody'), false, 'Suite 96: unknown character rejected')
 
     -- 13. Commands: /ac btn ..., /btn, /btnexec, /btncopy
     assert_eq(inst.onCommand('cursorui', { 'cursorui' }), false, 'Suite 96: unrelated commands fall through')
@@ -13493,7 +13496,7 @@ end)()
     assert_true(printedFind('has no button at slot 9'), 'Suite 96: /ac btn exec reports an empty slot')
     inst.onCommand('btn', { 'btn', 'exec', 'Nope', '1' })
     assert_true(printedFind('No set named "Nope"'), 'Suite 96: /ac btn exec reports an unknown set')
-    binds['/btncopy']('triune', 'bob')
+    binds['/btncopy']('mcac', 'bob')
     assert_eq(T.hotbars()[1].title, 'Bob Bar', 'Suite 96: /btncopy capitalises the name and copies the hotbars')
     inst.onCommand('btn', { 'btn', 'list' })
     assert_true(printedFind('Sets:'), 'Suite 96: /ac btn list prints the library')
@@ -13805,7 +13808,7 @@ end)()
     assert_true(rh[1].boxScope == 'all' and rh[2].boxScope == 'zone' and rh[1].showScopeBar == true, 'Suite 96: load clamps boxScope and defaults showScopeBar')
     T.browser.boxScope = 'bar'
 
-    -- Triune slash commands pick list (curated core list + live plugin help lines)
+    -- MCAC slash commands pick list (curated core list + live plugin help lines)
     core.runtime.pluginManager = { helpLines = function()
         return {
             '  \ag/ac cursorui | cursorwin | cursormgr\ax - Toggle the Cursor Item Manager window',
@@ -13911,7 +13914,7 @@ end)()
     -- 21. Core wiring
     assert_true(src:find("'buttons.lua',", 1, true) ~= nil, 'Suite 96: core discover() probes buttons.lua')
     assert_true(src:find("cmd = '/ac btn [n|new|exec <set> <index>|import bm]'", 1, true) ~= nil, 'Suite 96: help table documents /ac btn')
-    local btnSrc = readFile('TAC/lua/tac/buttons.lua')
+    local btnSrc = readFile('MCAC/lua/mcac/buttons.lua')
     assert_true(btnSrc:find('mq.delay(', 1, true) == nil, 'Suite 96: the plugin never calls mq.delay directly')
     assert_true(btnSrc:find('core.pushTheme()', 1, true) ~= nil, 'Suite 96: hotbars use the core theme')
 
@@ -14242,13 +14245,13 @@ end)()
     assert_true(src:find("1b. A box asked us for buffs (Box Network): serve it before our own list.", 1, true) ~= nil, 'Suite 97: downtime buffing serves box requests before its own list')
 
     -- 5. Group HUD box rows and DPS sharing (source contracts + DPS unit run)
-    local gwSrc = readFile('TAC/lua/tac/hud_group.lua')
+    local gwSrc = readFile('MCAC/lua/mcac/hud_group.lua')
     assert_true(gwSrc:find("ctrl.gw_show_boxes == true and core.boxnet", 1, true) ~= nil, 'Suite 97: Group HUD lists Box Network peers only when opted in')
     assert_true(gwSrc:find("isBox = true", 1, true) ~= nil, 'Suite 97: box rows are flagged')
     assert_true(gwSrc:find("accent(GOLD, '[Box]')", 1, true) ~= nil, 'Suite 97: box rows carry a [Box] badge')
     assert_true(gwSrc:find("otherZone = not inZone", 1, true) ~= nil, 'Suite 97: boxes in another zone render as other-zone')
     assert_true(gwSrc:find("Show Box Network Characters##gwBoxes", 1, true) ~= nil, 'Suite 97: settings toggle for box rows')
-    local dpsInst = assert(loadfile('TAC/lua/tac/dps.lua'))()
+    local dpsInst = assert(loadfile('MCAC/lua/mcac/dps.lua'))()
     local subs = {}
     local dpsCore = setmetatable({ mq = mockMq, boxnet = { available = function() return true end, subscribe = function(kind, fn) subs[kind] = fn return function() subs[kind] = nil end end, broadcast = function(kind, data) S.lastShare = { kind = kind, data = data } return true end } },
         { __index = function() return nil end })
@@ -14279,7 +14282,7 @@ end)()
     assert_eq(list[1].lastFight.dmg, 900, 'Suite 97: fight summary stored')
     S.now = 1000 + 61 * 1000
     assert_eq(#dpsInst.boxList(), 0, 'Suite 97: stale box parses drop after 60s')
-    local dpsSrc = readFile('TAC/lua/tac/dps.lua')
+    local dpsSrc = readFile('MCAC/lua/mcac/dps.lua')
     assert_true(dpsSrc:find("shareFight(rt.history[1])", 1, true) ~= nil, 'Suite 97: fight end broadcasts the summary')
     assert_true(dpsSrc:find("shareLive()", 1, true) ~= nil, 'Suite 97: live line shared from the tick')
     assert_true(dpsSrc:find('BeginTabItem("Group##MainGroupTab")', 1, true) ~= nil, 'Suite 97: DPS window has a Group tab (Box Network meter)')
@@ -14437,7 +14440,7 @@ end)()
     assert_true(src:find("if c.box_pull_coordination == nil then c.box_pull_coordination = true end", 1, true) ~= nil, 'Suite 98: setting defaults on for existing loadouts')
     assert_true(src:find("box_pull_coordination    = true,", 1, true) ~= nil, 'Suite 98: setting defaults on for new loadouts')
     assert_true(src:find("Stay Off Other Boxes\\' Pulls (Box Network)", 1, true) ~= nil, 'Suite 98: settings checkbox exists')
-    local bnSrc = readFile('TAC/lua/tac/boxnet.lua')
+    local bnSrc = readFile('MCAC/lua/mcac/boxnet.lua')
     assert_true(bnSrc:find('since   = net.targetSince,', 1, true) ~= nil, 'Suite 98: heartbeat target carries since')
     assert_true(bnSrc:find('function api.myTargetSince()', 1, true) ~= nil, 'Suite 98: boxnet exposes myTargetSince')
 end)()
@@ -14476,7 +14479,7 @@ end)()
         peer = function(n) return peers[tostring(n):lower()] end,
         command = function(scope, lines) sent[#sent + 1] = { scope = scope, lines = lines } return true end,
     } }
-    local inst = assert(loadfile('TAC/lua/tac/hud_group.lua'))()
+    local inst = assert(loadfile('MCAC/lua/mcac/hud_group.lua'))()
     inst.onInit(core)
     local G = inst._
 
@@ -14576,7 +14579,7 @@ end)()
     local savedBit = rawget(_G, 'bit')
     if not savedBit then rawset(_G, 'bit', { bor = function(...) local r = 0 for _, v in ipairs({ ... }) do r = r + v end return r end }) end
 
-    local inst = assert(loadfile('TAC/lua/tac/dps.lua'))()
+    local inst = assert(loadfile('MCAC/lua/mcac/dps.lua'))()
     local realPrint = print
     print = function() end ---@diagnostic disable-line: lowercase-global
     local okInit, errInit = pcall(inst.onInit, core)
@@ -14661,21 +14664,21 @@ end)()
     -- 5. Group report
     S.cmds = {}
     inst.reportGroupDPS()
-    assert_true(S.cmds[1]:find('^/group %[Triune DPS%] Group %(last fight%) 520 dps: Bob 400 %(80%%%) | Carol 120 %(20%%%) | Alice 0 %(0%%%)$') ~= nil, 'Suite 99: group report line: ' .. tostring(S.cmds[1]))
+    assert_true(S.cmds[1]:find('^/group %[MCAC DPS%] Group %(last fight%) 520 dps: Bob 400 %(80%%%) | Carol 120 %(20%%%) | Alice 0 %(0%%%)$') ~= nil, 'Suite 99: group report line: ' .. tostring(S.cmds[1]))
     inst.reportGroupDPS('raid')
     assert_true(S.cmds[2]:find('^/raid ', 1) ~= nil, 'Suite 99: report channel override')
     inst.dpsCommandHandler('group', 'say')
     assert_true(S.cmds[3]:find('^/say ', 1) ~= nil, 'Suite 99: /dps group <channel>')
 
     -- 6. Config round trip keeps the meter keys
-    local dsrc = readFile('TAC/lua/tac/dps.lua')
+    local dsrc = readFile('MCAC/lua/mcac/dps.lua')
     assert_true(dsrc:find('meterScope = %q', 1, true) ~= nil, 'Suite 99: meterScope persisted')
     assert_true(dsrc:find('compactGroup = %s', 1, true) ~= nil, 'Suite 99: compactGroup persisted')
     assert_true(dsrc:find("if data.meterScope == 'group' or data.meterScope == 'all' then", 1, true) ~= nil, 'Suite 99: meterScope loaded with validation')
     assert_true(dsrc:find('Show Group Meter in Compact Window', 1, true) ~= nil, 'Suite 99: compact meter toggle in Settings tab')
     assert_true(dsrc:find('"Meter Scope"', 1, true) ~= nil, 'Suite 99: scope combo in Settings tab')
     assert_true(dsrc:find("'Report Group##MainGroupRpt'", 1, true) ~= nil, 'Suite 99: Group tab has a Report Group button')
-    assert_true(dsrc:find('Triune DPS###TriuneDPSMiniWindow', 1, true) ~= nil, 'Suite 99: compact window keeps its ImGui id')
+    assert_true(dsrc:find('MCAC DPS###MCACDPSMiniWindow', 1, true) ~= nil, 'Suite 99: compact window keeps its ImGui id')
     assert_true(dsrc:find('ImGui.SameLine(180)', 1, true) == nil and dsrc:find('ImGui.SameLine(150)', 1, true) == nil, 'Suite 99: compact window has no hard-coded x offsets')
     assert_true(dsrc:find('group DPS meter fed by the other boxes', 1, true) ~= nil, 'Suite 99: uses text names the meter')
 
@@ -15168,13 +15171,13 @@ end)()
 ;(function()
     print('--- Suite 101: UI scale ---')
     do
-        local tsrc = readFile('TAC/lua/triune/init.lua')
+        local tsrc = readFile('MCAC/lua/mcac/init.lua')
         local fn = tsrc:match('function runtime%.restartScript%(%)(.-)\nend')
         assert_true(fn ~= nil, 'Suite 101: runtime.restartScript exists')
         local runAt, stopAt = fn:find("mq.cmd('/timed 15 /lua run ", 1, true), fn:find("mq.cmd('/lua stop ", 1, true)
         assert_true(runAt and stopAt and runAt < stopAt, 'Suite 101: restart queues the run through /timed before stopping itself')
         assert_true(fn:find('runtime.saveLoadout(true, true)', 1, true) ~= nil, 'Suite 101: restart saves the loadout first (forced past the debounce)')
-        assert_true(tsrc:find("Restart Triune##btnRestartScript', UI.px(", 1, true) ~= nil, 'Suite 101: Restart Triune button is scaled and lives in settings')
+        assert_true(tsrc:find("Restart MCAC##btnRestartScript', UI.px(", 1, true) ~= nil, 'Suite 101: Restart MCAC button is scaled and lives in settings')
         assert_true(tsrc:find("cmd == 'restart' or cmd == 'reload'", 1, true) ~= nil, 'Suite 101: /ac restart command')
     end
     local S = { vars = 0, cols = 0, fontScale = {}, tooltips = {}, comboRet = {}, saves = 0 }
@@ -15329,11 +15332,11 @@ end)()
         end
     end
     for _, f in ipairs(pluginFiles) do
-        local psrc = readFile('TAC/lua/tac/' .. f .. '.lua')
+        local psrc = readFile('MCAC/lua/mcac/' .. f .. '.lua')
         assert_eq(count(psrc, 'ImGui.Begin('), count(psrc, 'core.preBeginWindow(') + count(psrc, 'core.pushWindowScale('), 'Suite 101: every window in ' .. f .. ' goes through a scale hook')
     end
     for _, f in ipairs({ 'hud_group', 'hud_unitframes', 'hud_effects', 'hud_xtarget', 'hud_spellgems', 'hud_cooldowns' }) do
-        local psrc = readFile('TAC/lua/tac/' .. f .. '.lua')
+        local psrc = readFile('MCAC/lua/mcac/' .. f .. '.lua')
         assert_true(psrc:find('core.drawWindowScaleControl(', 1, true) ~= nil, 'Suite 101: ' .. f .. ' settings carry the scale picker')
         -- tight chrome pushed after the hook (so it wins over the scaled theme padding) and scaled
         local hook = psrc:find('core.preBeginWindow(', 1, true)
@@ -15342,10 +15345,10 @@ end)()
         assert_true(psrc:find('ImGui.PushStyleVar(ImGuiStyleVar.FramePadding, core.px(', 1, true) ~= nil, 'Suite 101: ' .. f .. ' chrome is scaled')
     end
     for _, f in ipairs({ 'hud_group', 'hud_unitframes', 'hud_effects', 'hud_xtarget' }) do
-        local psrc = readFile('TAC/lua/tac/' .. f .. '.lua')
+        local psrc = readFile('MCAC/lua/mcac/' .. f .. '.lua')
         assert_true(psrc:find('local barH = core.px(ctrl.', 1, true) ~= nil, 'Suite 101: ' .. f .. ' bar height is scaled')
     end
-    local bsrc = readFile('TAC/lua/tac/buttons.lua')
+    local bsrc = readFile('MCAC/lua/mcac/buttons.lua')
     assert_true(bsrc:find('local size = core.px((hb.buttonSize or 6) * 10)', 1, true) ~= nil, 'Suite 101: hotbar slot size follows the window scale')
     assert_true(bsrc:find('((b and b.fontScale) or hb.fontScale or 1.0) * winScale', 1, true) ~= nil, 'Suite 101: hotbar font scale multiplies the window scale')
     -- the sweep left no bare pixel literals on the common widgets
@@ -15359,7 +15362,7 @@ end)()
         return bad
     end
     for _, f in ipairs(pluginFiles) do
-        local bad = unscaledLines(readFile('TAC/lua/tac/' .. f .. '.lua'))
+        local bad = unscaledLines(readFile('MCAC/lua/mcac/' .. f .. '.lua'))
         assert_eq(#bad, 0, 'Suite 101: ' .. f .. ' has no unscaled SetNextItemWidth / sized Button: ' .. (bad[1] or ''))
     end
     local coreBad = unscaledLines(src)
@@ -15367,7 +15370,7 @@ end)()
 end)()
 
 -- ============================================================================
--- Suite 102: tac/chat.lua (Chat Windows plugin) — classifier fixture from a
+-- Suite 102: mcac/chat.lua (Chat Windows plugin) — classifier fixture from a
 -- live capture, link resolution, ring buffer, tab filters, config sanitize /
 -- roundtrip, send routing and the plugin lifecycle under a mock core
 -- ============================================================================
@@ -15382,7 +15385,7 @@ end)()
     local quiet = function(...) printed[#printed + 1] = table.concat({ ... }, ' ') end
     local origPrint = print
     print = quiet
-    local okLoad, plugin = pcall(function() return assert(loadfile('TAC/lua/tac/chat.lua'))() end)
+    local okLoad, plugin = pcall(function() return assert(loadfile('MCAC/lua/mcac/chat.lua'))() end)
     print = origPrint
     assert_true(okLoad and type(plugin) == 'table', 'Suite 102: chat.lua loads: ' .. tostring(plugin))
     if not okLoad then return end
@@ -15392,19 +15395,19 @@ end)()
     assert_true(src:find('if c.show_chat == nil then c.show_chat = false end', 1, true) ~= nil, 'Suite 102: core sanitize seeds show_chat')
     assert_true(src:find("            'chat.lua',", 1, true) ~= nil, 'Suite 102: discover() probe list includes chat.lua')
 
-    -- 1. Classifier: lines captured on the Triune server (player names replaced)
+    -- 1. Classifier: lines captured on the MCAC server (player names replaced)
     local ctx = { me = 'Genro', pets = { Spinevenom = true } }
     local fixture = {
-        { '[Triune Chat] loaded', 'triune' },
-        { ESC .. '300000[Triune DPS]' .. ESC .. '777777 v4.3 loaded!', 'triune' },
-        { '[Triune] AA fired: Distant Strike', 'triune' },
+        { '[MCAC Chat] loaded', 'mcac' },
+        { ESC .. '300000[MCAC DPS]' .. ESC .. '777777 v4.3 loaded!', 'mcac' },
+        { '[MCAC] AA fired: Distant Strike', 'mcac' },
         { '[Nav] Navigating to spawn: a_warlord_of_hate005 (271)', 'mq' },
         { 'Cannot bind /chat, already bound in MQ.', 'mq' },
         { '[NMS] Words of Obliteration sold for 3 platinum, 3 gold.', 'nms' },
         { '[NMS] Active looter: you.', 'nms' },
         { '[NMS] Offers waiting: 0 (0 items).', 'nms' },
         { '[NMS Loot] offer 1748 slot 65535 id 12428 qty 1 "Iksar Bandit Mask"', 'nms' },
-        { '[Triune NMS] Active looter is now Bob.', 'triune' },
+        { '[MCAC NMS] Active looter is now Bob.', 'mcac' },
         { 'You receive no coin.', 'loot' },
         { 'miss', 'melee_num' }, { '249', 'melee_num' }, { '1056', 'melee_num' },
         { 'Spinevenom was burned.', 'ds', 'Spinevenom' }, { 'YOU are burned!', 'ds' }, { 'Gennro was burned.', 'ds', 'Gennro' },
@@ -15574,9 +15577,9 @@ end)()
     local c = plugin.sanitizeConfig(nil)
     assert_true(#c.windows == 1 and #c.windows[1].tabs == 7 and c.windows[1].tabs[1].channels == nil, 'Suite 102: default layout: one window, seven tabs, All tab unfiltered')
     assert_eq(c.windows[1].tabs[5].send, 'tell', 'Suite 102: Tells tab sends tells')
-    assert_true(c.windows[1].tabs[6].notifyOnly == true and c.windows[1].tabs[6].name == 'Notifications' and c.windows[1].tabs[6].channels == nil and c.windows[1].tabs[7].id == 'triune', 'Suite 102: default Notifications tab sits before Triune: every channel, flagged lines only')
-    local mig = plugin.sanitizeConfig({ version = 2, windows = { { id = 'main', activeTab = 2, tabs = { { id = 'all' }, { id = 'triune' } } }, { id = 'w2', tabs = { { id = 'all' } } } } })
-    assert_true(#mig.windows[1].tabs == 3 and mig.windows[1].tabs[2].notifyOnly == true and mig.windows[1].tabs[3].id == 'triune' and mig.windows[1].activeTab == 3 and #mig.windows[2].tabs == 1, 'Suite 102: a v2 config gains a Notifications tab in the main window only, before Triune, active tab kept')
+    assert_true(c.windows[1].tabs[6].notifyOnly == true and c.windows[1].tabs[6].name == 'Notifications' and c.windows[1].tabs[6].channels == nil and c.windows[1].tabs[7].id == 'mcac', 'Suite 102: default Notifications tab sits before MCAC: every channel, flagged lines only')
+    local mig = plugin.sanitizeConfig({ version = 2, windows = { { id = 'main', activeTab = 2, tabs = { { id = 'all' }, { id = 'mcac' } } }, { id = 'w2', tabs = { { id = 'all' } } } } })
+    assert_true(#mig.windows[1].tabs == 3 and mig.windows[1].tabs[2].notifyOnly == true and mig.windows[1].tabs[3].id == 'mcac' and mig.windows[1].activeTab == 3 and #mig.windows[2].tabs == 1, 'Suite 102: a v2 config gains a Notifications tab in the main window only, before MCAC, active tab kept')
     local mig3 = plugin.sanitizeConfig({ version = 3, windows = { { id = 'main', tabs = { { id = 'all' } } } } })
     assert_true(#mig3.windows[1].tabs == 1, 'Suite 102: a v3 config that dropped the tab is left alone')
     local mig2b = plugin.sanitizeConfig({ version = 2, windows = { { id = 'main', tabs = { { id = 'mine', notifyOnly = true } } } } })
@@ -15665,7 +15668,7 @@ end)()
         -- doevents(name): deliver the lines MQ has queued for that event only
         doevents = function(...)
             S.doeventsArgs = { ... }
-            local ev = S.events.TACChatAll
+            local ev = S.events.MCACChatAll
             if not ev then return end
             local lines = S.pendingLines or {}
             S.pendingLines = {}
@@ -15689,18 +15692,18 @@ end)()
     local core = setmetatable({ mq = mockMq, ImGui = mockImGui, saveLoadout = function() S.saves = S.saves + 1 end, accent = noop, px = function(v) return v end,
         pushTheme = noop, popTheme = noop, preBeginWindow = noop, postBeginWindow = noop },
         { __index = function(_, k) if k == 'ctrl' then return ctrl end end })
-    os.remove(cfgDir .. '/triune_chat_Genro.lua')
-    local histPath = cfgDir .. '/triune_chat_history_Genro.txt'
+    os.remove(cfgDir .. '/mcac_chat_Genro.lua')
+    local histPath = cfgDir .. '/mcac_chat_history_Genro.txt'
     os.remove(histPath)
     print = quiet
     plugin.onInit(core)
     plugin.onInit(core) -- the manager may re-init without onDestroy
     print = origPrint
-    assert_true(S.events.TACChatAll ~= nil and S.events.TACChatAll.pat == '#*#' and S.events.TACChatAll.opts.keepLinks == true, 'Suite 102: catch-all event with keepLinks')
-    assert_true(S.binds['/tacchat'] ~= nil, 'Suite 102: /tacchat bound (not /chat, which EQ owns)')
+    assert_true(S.events.MCACChatAll ~= nil and S.events.MCACChatAll.pat == '#*#' and S.events.MCACChatAll.opts.keepLinks == true, 'Suite 102: catch-all event with keepLinks')
+    assert_true(S.binds['/mcacchat'] ~= nil, 'Suite 102: /mcacchat bound (not /chat, which EQ owns)')
     assert_eq(ctrl.show_chat, false, 'Suite 102: show_chat seeded off')
     local cfg = plugin.cfg
-    for _, f in ipairs(fixture) do S.events.TACChatAll.fn(f[1]) end
+    for _, f in ipairs(fixture) do S.events.MCACChatAll.fn(f[1]) end
     plugin.onTick()
     local rt = plugin.rt
     assert_eq(rt.stats.total, #fixture, 'Suite 102: every queued line ingested on tick')
@@ -15790,15 +15793,15 @@ end)()
     assert_eq(#cfg.inputHistory, 0, 'Suite 102: sendText itself records no history (the input line does, with its links)')
 
     print = quiet
-    S.binds['/tacchat']('toggle')
-    assert_true(ctrl.show_chat == true and S.saves >= 1, 'Suite 102: /tacchat toggle opens and saves the loadout')
-    S.binds['/tacchat']('tab', 'Tells')
-    assert_eq(win.activeTab, 5, 'Suite 102: /tacchat tab <name> activates the tab')
-    S.binds['/tacchat']('capture', 'on')
+    S.binds['/mcacchat']('toggle')
+    assert_true(ctrl.show_chat == true and S.saves >= 1, 'Suite 102: /mcacchat toggle opens and saves the loadout')
+    S.binds['/mcacchat']('tab', 'Tells')
+    assert_eq(win.activeTab, 5, 'Suite 102: /mcacchat tab <name> activates the tab')
+    S.binds['/mcacchat']('capture', 'on')
     assert_true(cfg.capture == true and rt.captureFile ~= nil, 'Suite 102: capture on opens the file')
-    S.events.TACChatAll.fn('You gain party experience!!')
+    S.events.MCACChatAll.fn('You gain party experience!!')
     plugin.onTick()
-    S.binds['/tacchat']('capture', 'off')
+    S.binds['/mcacchat']('capture', 'off')
     print = origPrint
     local capf = io.open(rt.capturePath, 'r')
     local capText = capf and capf:read('*a') or ''
@@ -15819,9 +15822,9 @@ end)()
     local origCmd = mockMq.cmd
     mockMq.cmd = function(c) if c == '/beep' then beeps = beeps + 1 else S.cmds[#S.cmds + 1] = c end end
     rt.lastBeepAt = 0
-    S.events.TACChatAll.fn(P('Playerone') .. " tells you, 'need a BUFF please'")
-    S.events.TACChatAll.fn(P('Playerone') .. " tells you, 'buff again'")
-    S.events.TACChatAll.fn(P('Playertwo') .. " says out of character, 'spam'")
+    S.events.MCACChatAll.fn(P('Playerone') .. " tells you, 'need a BUFF please'")
+    S.events.MCACChatAll.fn(P('Playerone') .. " tells you, 'buff again'")
+    S.events.MCACChatAll.fn(P('Playertwo') .. " says out of character, 'spam'")
     plugin.onTick()
     local hlEntry, mutedEntry = rt.ring.items[rt.ring.last - 2], rt.ring.items[rt.ring.last]
     assert_true(hlEntry.hl == 'FFD700' and hlEntry.flash == true, 'Suite 102: highlight colours and flags the line (case-insensitive)')
@@ -15832,10 +15835,10 @@ end)()
     assert_true(socialSt.flashAt > 0 and tellsSt.flashAt == 0, 'Suite 102: hidden tab flashes on a highlighted line, the active one does not')
     mockMq.cmd = origCmd
     win.tabs[5].logToFile = true
-    S.events.TACChatAll.fn(P('Playerone') .. " tells you, 'log me'")
+    S.events.MCACChatAll.fn(P('Playerone') .. " tells you, 'log me'")
     plugin.onTick()
     assert_true(tellsSt.logFile ~= nil, 'Suite 102: tab log file opened on demand')
-    local logPath = string.format('%s/tac_chat_Genro_Tells_%s.txt', cfgDir, os.date('%Y%m%d'))
+    local logPath = string.format('%s/mcac_chat_Genro_Tells_%s.txt', cfgDir, os.date('%Y%m%d'))
     local lf = io.open(logPath, 'r')
     local logText = lf and lf:read('*a') or ''
     if lf then lf:close() end
@@ -15885,16 +15888,16 @@ end)()
     assert_true(#cfg.windows == 1 and win.open == false and ctrl.show_chat == false, 'Suite 102: closing the last window hides the plugin instead of deleting it')
     win.open = true
     print = quiet
-    S.binds['/tacchat']('window', 'new', 'Cmd')
-    assert_true(#cfg.windows == 2 and cfg.windows[2].title == 'Cmd' and ctrl.show_chat == true, 'Suite 102: /tacchat window new')
-    S.binds['/tacchat']('window', 'close', 'Cmd')
-    assert_eq(#cfg.windows, 1, 'Suite 102: /tacchat window close')
-    S.binds['/tacchat']('mute', 'Spammer')
-    assert_eq(cfg.muted.spammer, true, 'Suite 102: /tacchat mute lowercases')
-    S.binds['/tacchat']('unmute', 'SPAMMER')
-    assert_eq(cfg.muted.spammer, nil, 'Suite 102: /tacchat unmute')
-    S.binds['/tacchat']('settings')
-    assert_true(rt.editor ~= nil and rt.editor.winId == win.id, 'Suite 102: /tacchat settings opens the editor on the active tab')
+    S.binds['/mcacchat']('window', 'new', 'Cmd')
+    assert_true(#cfg.windows == 2 and cfg.windows[2].title == 'Cmd' and ctrl.show_chat == true, 'Suite 102: /mcacchat window new')
+    S.binds['/mcacchat']('window', 'close', 'Cmd')
+    assert_eq(#cfg.windows, 1, 'Suite 102: /mcacchat window close')
+    S.binds['/mcacchat']('mute', 'Spammer')
+    assert_eq(cfg.muted.spammer, true, 'Suite 102: /mcacchat mute lowercases')
+    S.binds['/mcacchat']('unmute', 'SPAMMER')
+    assert_eq(cfg.muted.spammer, nil, 'Suite 102: /mcacchat unmute')
+    S.binds['/mcacchat']('settings')
+    assert_true(rt.editor ~= nil and rt.editor.winId == win.id, 'Suite 102: /mcacchat settings opens the editor on the active tab')
     print = origPrint
 
     -- 9. Full draw pass under a permissive ImGui mock (window, toolbar menu, inline log, editor)
@@ -16034,12 +16037,12 @@ end)()
     print = quiet
     plugin.chatCommand('ghost')
     print = origPrint
-    assert_eq(cfg.windows[1].ghost, true, 'Suite 102: /tacchat ghost toggles the first window')
+    assert_eq(cfg.windows[1].ghost, true, 'Suite 102: /mcacchat ghost toggles the first window')
     print = quiet
     plugin.chatCommand('ghost', cfg.windows[1].title)
     plugin.chatCommand('ghost', 'no such window')
     print = origPrint
-    assert_eq(cfg.windows[1].ghost, false, 'Suite 102: /tacchat ghost <title> toggles that window; an unknown name changes nothing')
+    assert_eq(cfg.windows[1].ghost, false, 'Suite 102: /mcacchat ghost <title> toggles that window; an unknown name changes nothing')
 
     -- Tells and notifications outlive the main ring: a conversation tab is
     -- not emptied by a fight's worth of combat lines.
@@ -16054,8 +16057,8 @@ end)()
     cfg.tellPopouts = true
     plugin.TB.clearAll()   -- Clear all tabs: fresh rings and empty tab buffers
     assert_true(rt.ring.cap == 200 and rt.ring.last == 0 and rt.tabs[win.id .. '/' .. tellsTab.id].last == 0, 'Suite 102: Clear all tabs empties every buffer with the rings')
-    S.events.TACChatAll.fn(P('Alice') .. " tells you, 'remember me'")
-    S.events.TACChatAll.fn(P('Alice') .. " says, 'Genro are you there'")   -- a mention: a notification
+    S.events.MCACChatAll.fn(P('Alice') .. " tells you, 'remember me'")
+    S.events.MCACChatAll.fn(P('Alice') .. " says, 'Genro are you there'")   -- a mention: a notification
     plugin.onTick()
     local tw = plugin.findTellWindow()
     local aliceTab = tw and plugin.findTellTab(tw, 'Alice')
@@ -16068,7 +16071,7 @@ end)()
     assert_true(okDraw and aliceSt.last - aliceSt.first + 1 == 1 and tellsSt2.last - tellsSt2.first + 1 == 1 and notifySt.last - notifySt.first + 1 == 1
         and socialSt.last - socialSt.first + 1 == 2, 'Suite 102: the tell and the mention land in their tabs')
     for i = 1, 300 do
-        S.events.TACChatAll.fn(P('Someone') .. " says, 'spam line " .. i .. "'")
+        S.events.MCACChatAll.fn(P('Someone') .. " says, 'spam line " .. i .. "'")
         if i % 100 == 0 then plugin.onTick() end
     end
     plugin.onTick()
@@ -16088,14 +16091,14 @@ end)()
     -- history used to vanish after a fight), through rebuilds too.
     local guildTab = { id = 'gt', name = 'Guild', channels = { guild = true }, include = {}, exclude = {}, send = 'guild' }
     win.tabs[#win.tabs + 1] = guildTab
-    S.events.TACChatAll.fn(P('Guildie') .. " tells the guild, 'raid at eight'")
+    S.events.MCACChatAll.fn(P('Guildie') .. " tells the guild, 'raid at eight'")
     plugin.onTick()
     okDraw = pcall(plugin.onDrawUI)
     local guildSt = rt.tabs[win.id .. '/' .. guildTab.id]
     assert_true(okDraw and guildSt.last - guildSt.first + 1 == 1 and guildSt.entries[guildSt.first].text:find('raid at eight', 1, true) ~= nil, 'Suite 102: the guild line lands in the guild tab')
     local guildId = guildSt.entries[guildSt.first].id
     for i = 1, 250 do
-        S.events.TACChatAll.fn('You slash a rat for ' .. i .. ' points of damage.')
+        S.events.MCACChatAll.fn('You slash a rat for ' .. i .. ' points of damage.')
         if i % 100 == 0 then plugin.onTick() end
     end
     plugin.onTick()
@@ -16105,7 +16108,7 @@ end)()
     guildSt.rebuild = true
     okDraw = pcall(plugin.onDrawUI)
     assert_true(okDraw and guildSt.last - guildSt.first + 1 == 1 and guildSt.entries[guildSt.first].id == guildId, 'Suite 102: a rebuild keeps the lines only the tab still holds')
-    S.events.TACChatAll.fn(P('Guildie') .. " tells the guild, 'bring food'")
+    S.events.MCACChatAll.fn(P('Guildie') .. " tells the guild, 'bring food'")
     plugin.onTick()
     guildSt.rebuild = true
     okDraw = pcall(plugin.onDrawUI)
@@ -16120,7 +16123,7 @@ end)()
     guildSt.rebuild = true
     okDraw = pcall(plugin.onDrawUI)
     assert_true(okDraw and guildSt.last - guildSt.first + 1 == 0, 'Suite 102: Clear this tab: a rebuild does not bring the cleared lines back from the ring')
-    S.events.TACChatAll.fn(P('Guildie') .. " tells the guild, 'after the clear'")
+    S.events.MCACChatAll.fn(P('Guildie') .. " tells the guild, 'after the clear'")
     plugin.onTick()
     okDraw = pcall(plugin.onDrawUI)
     assert_true(okDraw and guildSt.last - guildSt.first + 1 == 1 and guildSt.entries[guildSt.first].text:find('after the clear', 1, true) ~= nil, 'Suite 102: lines after the clear show')
@@ -16137,7 +16140,7 @@ end)()
     -- a tell to Alice while she is offline: the notice lands in her tab and
     -- the Tells tab as an undelivered outgoing tell, in the warning colour,
     -- with a status line above the input
-    S.events.TACChatAll.fn('alice is not online at this time.')
+    S.events.MCACChatAll.fn('alice is not online at this time.')
     plugin.onTick()
     okDraw = pcall(plugin.onDrawUI)
     local lastAlice = aliceSt.entries[aliceSt.last]
@@ -16146,7 +16149,7 @@ end)()
     assert_eq(lastAlice.hl, 'FFB84D', 'Suite 102: in the warning colour')
     assert_true(tellsSt2.last - tellsSt2.first + 1 == 2, 'Suite 102: and the Tells tab shows it')
     assert_true(rt.echo ~= nil and rt.echo:find('Alice is not online', 1, true) ~= nil, 'Suite 102: the status line says so')
-    S.events.TACChatAll.fn(P('Bob') .. " tells you, 'new person'")
+    S.events.MCACChatAll.fn(P('Bob') .. " tells you, 'new person'")
     plugin.onTick()
     okDraw = pcall(plugin.onDrawUI)
     assert_true(okDraw and aliceSt.last - aliceSt.first + 1 == 2 and plugin.findTellTab(tw, 'Bob') ~= nil, 'Suite 102: a tell from someone else leaves the other conversation intact')
@@ -16216,24 +16219,24 @@ end)()
     assert_true(bal.child == 0 and bal.win == 0 and bal.tab == 0 and bal.popup == 0 and bal.tabbar == 0, string.format('Suite 102: ImGui scopes balanced after the error (child %d win %d tab %d popup %d tabbar %d)', bal.child, bal.win, bal.tab, bal.popup, bal.tabbar))
     -- the failure flips the next frame into safe mode (one pane, default font), and the trace dumps on error
     print = quiet
-    S.binds['/tacchat']('trace', 'on')
-    assert_true(rt.trace ~= nil, 'Suite 102: /tacchat trace on')
+    S.binds['/mcacchat']('trace', 'on')
+    assert_true(rt.trace ~= nil, 'Suite 102: /mcacchat trace on')
     rt.stats.drawErr, rt.stats.drawErrShown = nil, nil
     rt.frameFailed = false
     okDraw = pcall(plugin.onDrawUI)          -- still erroring (InputText throws): records steps + dumps
     print = origPrint
-    local tf = io.open(cfgDir .. '/tac_chat_trace_Genro.txt', 'r')
+    local tf = io.open(cfgDir .. '/mcac_chat_trace_Genro.txt', 'r')
     local traceText = tf and tf:read('*a') or ''
     if tf then tf:close() end
     assert_true(traceText:find('BeginTabBar pane', 1, true) ~= nil and traceText:find('ERROR', 1, true) ~= nil, 'Suite 102: draw trace dumped with scope steps and the error')
-    os.remove(cfgDir .. '/tac_chat_trace_Genro.txt')
+    os.remove(cfgDir .. '/mcac_chat_trace_Genro.txt')
     print = quiet
     okDraw = pcall(plugin.onDrawUI)
     print = origPrint
     assert_true(rt.safeMode == true, 'Suite 102: safe mode engaged after a failed frame')
     print = quiet
-    S.binds['/tacchat']('safemode', 'off')
-    S.binds['/tacchat']('trace', 'off')
+    S.binds['/mcacchat']('safemode', 'off')
+    S.binds['/mcacchat']('trace', 'off')
     print = origPrint
     assert_true(rt.safeMode == false and rt.trace == nil, 'Suite 102: safe mode and trace switched off by command')
     drawMock.InputText = function(_, v) return v, false end
@@ -16252,7 +16255,7 @@ end)()
     -- oldest entries (the queue is trimmed from the front, so `#` is unusable).
     cfg.maxLines = 300
     rt.ring.cap = 300
-    for i = 1, 900 do S.events.TACChatAll.fn('You receive ' .. i .. ' gold.') end
+    for i = 1, 900 do S.events.MCACChatAll.fn('You receive ' .. i .. ' gold.') end
     -- A drain is budgeted (at most 400 lines / 12 ms per tick, the rest stays
     -- queued in order), so a burst takes a few ticks; the tick stays short.
     plugin.onTick()
@@ -16266,7 +16269,7 @@ end)()
     assert_true(okDraw, 'Suite 102: draw after eviction: ' .. tostring(errDraw))
     assert_true(allSt.first <= allSt.last and allSt.entries[allSt.last] ~= nil and allSt.entries[allSt.last].text == 'You receive 900 gold.', 'Suite 102: newest line still at the end of the tab queue after eviction')
     assert_true(allSt.last - allSt.first + 1 == 300 and allSt.entries[allSt.first].text == 'You receive 601 gold.', 'Suite 102: tab buffer bounded by Buffer lines, newest kept')
-    for i = 1, 600 do S.events.TACChatAll.fn('You receive ' .. (900 + i) .. ' gold.') end
+    for i = 1, 600 do S.events.MCACChatAll.fn('You receive ' .. (900 + i) .. ' gold.') end
     ticks = 0
     while #rt.queue > 0 and ticks < 10 do plugin.onTick(); ticks = ticks + 1 end
     okDraw, errDraw = pcall(plugin.onDrawUI)
@@ -16274,7 +16277,7 @@ end)()
     -- The event queue itself is capped: a stall that piles up more than 3000
     -- lines drops the oldest half rather than growing without bound.
     local dropsBefore = plugin.profile.dropped
-    for i = 1, 3001 do S.events.TACChatAll.fn('spam ' .. i) end
+    for i = 1, 3001 do S.events.MCACChatAll.fn('spam ' .. i) end
     assert_true(#rt.queue == 1501 and plugin.profile.dropped - dropsBefore == 1500 and rt.queue[1] == 'spam 1501' and rt.queue[#rt.queue] == 'spam 3001',
         string.format('Suite 102: event queue capped at 3000 (queued %d, dropped %d)', #rt.queue, plugin.profile.dropped - dropsBefore))
     rt.queue = {}
@@ -16290,10 +16293,10 @@ end)()
     -- 10. Tells: recent-partner list and the tabbed Tells window
     core.ImGui = drawMock
     cfg.recentTells = {}
-    S.events.TACChatAll.fn(P('Playerone') .. " tells you, 'hi'")
-    S.events.TACChatAll.fn("You told " .. P('Playertwo') .. ", 'hello'")
-    S.events.TACChatAll.fn(P('Playerone') .. " tells you, 'again'")
-    S.events.TACChatAll.fn("Spinevenom tells you, 'Attacking a rat Master.'")
+    S.events.MCACChatAll.fn(P('Playerone') .. " tells you, 'hi'")
+    S.events.MCACChatAll.fn("You told " .. P('Playertwo') .. ", 'hello'")
+    S.events.MCACChatAll.fn(P('Playerone') .. " tells you, 'again'")
+    S.events.MCACChatAll.fn("Spinevenom tells you, 'Attacking a rat Master.'")
     plugin.onTick()
     assert_eq(#cfg.recentTells, 2, 'Suite 102: recent tells lists each partner once (pets excluded)')
     assert_true(cfg.recentTells[1] == 'Playerone' and cfg.recentTells[2] == 'Playertwo', 'Suite 102: recent tells are most recent first, incoming and outgoing')
@@ -16301,16 +16304,16 @@ end)()
     assert_true(#cfg.recentTells == 5 and cfg.recentTells[1] == 'Person7', 'Suite 102: recent tells capped at five')
     assert_eq(#cfg.windows, 1, 'Suite 102: no Tells window while the option is off')
     cfg.tellPopouts = true
-    S.events.TACChatAll.fn(P('Playerone') .. " tells you, 'pop'")
-    S.events.TACChatAll.fn(P('Playerone') .. " tells you, 'pop2'")
+    S.events.MCACChatAll.fn(P('Playerone') .. " tells you, 'pop'")
+    S.events.MCACChatAll.fn(P('Playerone') .. " tells you, 'pop2'")
     plugin.onTick()
     local tw = plugin.findTellWindow()
     assert_true(tw ~= nil and #cfg.windows == 2 and tw.open and tw.title == 'Tells' and tw.tellWindow == true and tw.id == 'tells', 'Suite 102: a tell opens the one Tells window')
     local t1 = plugin.findTellTab(tw, 'playerone')
     assert_true(t1 ~= nil and #tw.tabs == 1 and t1.name == 'Playerone' and t1.send == 'tell' and t1.tellTarget == 'Playerone' and t1.tellWith == 'Playerone', 'Suite 102: the conversation is one tab, set to reply to that person')
-    S.events.TACChatAll.fn("You told " .. P('Playerone') .. ", 'back at you'")
-    S.events.TACChatAll.fn(P('Playertwo') .. " tells you, 'other convo'")
-    S.events.TACChatAll.fn('You receive 5 gold.')
+    S.events.MCACChatAll.fn("You told " .. P('Playerone') .. ", 'back at you'")
+    S.events.MCACChatAll.fn(P('Playertwo') .. " tells you, 'other convo'")
+    S.events.MCACChatAll.fn('You receive 5 gold.')
     plugin.onTick()
     local t2, t2i = plugin.findTellTab(tw, 'Playertwo')
     assert_true(t2 ~= nil and t2i == 2 and #tw.tabs == 2 and #cfg.windows == 2, 'Suite 102: a second person gets a second tab, not a second window')
@@ -16335,10 +16338,10 @@ end)()
     assert_true(r1[1].text == 'Playertwo' and r1[1].name == true and r1[2].name == false, 'Suite 102: the name is its own run at the start of a tell: ' .. tostring(r1[1].text))
     local r2 = runsOf(outLine)
     assert_true(r2[1].text == 'You told' and r2[1].name == false and r2[2].text == 'Playerone' and r2[2].name == true and r2[3].name == false, 'Suite 102: the name run is found mid-line: ' .. tostring(r2[2] and r2[2].text))
-    S.events.TACChatAll.fn(P('Groupguy') .. " tells the group, 'inc'")
-    S.events.TACChatAll.fn("a rat says 'Squeak'")
-    S.events.TACChatAll.fn("You tell your party, 'ok'")
-    S.events.TACChatAll.fn("You told Plainname, 'no link on this one'")
+    S.events.MCACChatAll.fn(P('Groupguy') .. " tells the group, 'inc'")
+    S.events.MCACChatAll.fn("a rat says 'Squeak'")
+    S.events.MCACChatAll.fn("You tell your party, 'ok'")
+    S.events.MCACChatAll.fn("You told Plainname, 'no link on this one'")
     plugin.onTick()
     assert_eq(rt.ring.items[rt.ring.last - 3].player, 'Groupguy', 'Suite 102: group / say / guild senders are clickable too')
     assert_true(rt.ring.items[rt.ring.last - 2].player == nil and rt.ring.items[rt.ring.last - 1].player == nil, 'Suite 102: NPCs and my own lines are not')
@@ -16369,13 +16372,13 @@ end)()
     rawset(_G, 'ImGuiTabItemFlags', savedTIF)
     plugin.chatCommand('tell', 'Playerfour')
 
-    assert_true(#tw.tabs == 5 and plugin.findTellTab(tw, 'Playerfour') ~= nil and plugin.isTabActive(tw, 5), 'Suite 102: /tacchat tell <name> opens a conversation the same way')
+    assert_true(#tw.tabs == 5 and plugin.findTellTab(tw, 'Playerfour') ~= nil and plugin.isTabActive(tw, 5), 'Suite 102: /mcacchat tell <name> opens a conversation the same way')
     -- closing conversations: a tab at a time, the last one closes the window
     assert_true(plugin.closeTab(tw, 5) and plugin.closeTab(tw, select(2, plugin.findTellTab(tw, 'Playerthree'))) and #tw.tabs == 3 and plugin.findTellTab(tw, 'Playerthree') == nil and plugin.findTellTab(tw, 'Playerone') ~= nil, 'Suite 102: closing a conversation removes its tab')
     assert_true(plugin.closeTab(tw, 1) and plugin.closeTab(tw, 1) and plugin.closeTab(tw, 1) and plugin.findTellWindow() == nil and #cfg.windows == 1, 'Suite 102: closing the last conversation closes the Tells window')
 
     -- closing the window from its title bar removes it; the next tell brings it back
-    S.events.TACChatAll.fn(P('Playerone') .. " tells you, 'pop3'")
+    S.events.MCACChatAll.fn(P('Playerone') .. " tells you, 'pop3'")
     plugin.onTick()
     tw = plugin.findTellWindow()
     assert_true(tw ~= nil and #tw.tabs == 1, 'Suite 102: a tell after closing recreates the window with just that conversation')
@@ -16386,7 +16389,7 @@ end)()
     assert_true(cfg.windows[1] == win and win.open == false, 'Suite 102: closing the main window still just hides it')
     win.open = true
     ctrl.show_chat = true
-    S.events.TACChatAll.fn(P('Playerone') .. " tells you, 'back?'")
+    S.events.MCACChatAll.fn(P('Playerone') .. " tells you, 'back?'")
     plugin.onTick()
     tw = plugin.findTellWindow()
     assert_true(tw ~= nil and plugin.findTellTab(tw, 'Playerone') ~= nil, 'Suite 102: the next tell recreates the window')
@@ -16400,10 +16403,10 @@ end)()
     local winCount, tabCount = #cfg.windows, #tw.tabs
     local popTab = plugin.findTellTab(tw, 'Playerone')
     plugin.sendText(popTab, 'sent from the tab')
-    S.events.TACChatAll.fn("Genro tells you, 'sent from the tab'")
+    S.events.MCACChatAll.fn("Genro tells you, 'sent from the tab'")
     plugin.sendText(popTab, '/tell Playertwo via slash command')
-    S.events.TACChatAll.fn("Genro tells you, 'via slash command'")
-    S.events.TACChatAll.fn("Genro tells you, 'typed in the game box'")
+    S.events.MCACChatAll.fn("Genro tells you, 'via slash command'")
+    S.events.MCACChatAll.fn("Genro tells you, 'typed in the game box'")
     plugin.onTick()
     assert_true(plugin.findTellTab(tw, 'Genro') == nil and #cfg.windows == winCount and #tw.tabs == tabCount + 1 and plugin.findTellTab(tw, 'Playertwo') ~= nil, 'Suite 102: echoed self tells open the recipient\'s tab, never one for me')
     local lastTwo = rt.ring.items[rt.ring.last]
@@ -16411,17 +16414,17 @@ end)()
     assert_eq(rt.ring.items[rt.ring.last - 1].sender, 'Playertwo', 'Suite 102: /tell typed in the input is matched to its echo')
     assert_eq(rt.ring.items[rt.ring.last - 2].sender, 'Playerone', 'Suite 102: a tell sent from the tab is matched to its echo')
     assert_eq(cfg.recentTells[1], 'Playertwo', 'Suite 102: echoed tells update the recent list with the recipient')
-    S.events.TACChatAll.fn(P('Playerthree') .. " tells you, 'yo'")
+    S.events.MCACChatAll.fn(P('Playerthree') .. " tells you, 'yo'")
     plugin.onTick()
     plugin.sendText(popTab, '/r back at you')
-    S.events.TACChatAll.fn("Genro tells you, 'back at you'")
+    S.events.MCACChatAll.fn("Genro tells you, 'back at you'")
     plugin.onTick()
     assert_eq(rt.ring.items[rt.ring.last].sender, 'Playerthree', 'Suite 102: /r replies resolve to the last person who sent a tell')
     -- pet chatter is never a tell: no Tells tab, not in recent tells, and the pet is remembered for the session
     local recentBefore = #cfg.recentTells
     assert_true(rt.pets.Xorbaz == nil, 'Suite 102: Xorbaz is not a polled pet name')
-    S.events.TACChatAll.fn("Xorbaz tells you, 'I beg forgiveness, Master. That target is too far away.")
-    S.events.TACChatAll.fn('Xorbaz scores a critical hit! (400)')
+    S.events.MCACChatAll.fn("Xorbaz tells you, 'I beg forgiveness, Master. That target is too far away.")
+    S.events.MCACChatAll.fn('Xorbaz scores a critical hit! (400)')
     plugin.onTick()
     assert_true(plugin.findTellTab(tw, 'Xorbaz') == nil and #cfg.recentTells == recentBefore, 'Suite 102: a pet line with the Master mid-sentence opens no conversation')
     assert_true(rt.ring.items[rt.ring.last - 1].channel == 'petchat' and rt.ring.items[rt.ring.last].channel == 'pet', 'Suite 102: the pet is learned from its chatter, so its crits file under Pet: ' .. rt.ring.items[rt.ring.last].channel)
@@ -16434,7 +16437,7 @@ end)()
     assert_true(plugin.findTellWindow() == nil and #cfg.windows == 1, 'Suite 102: Tells window closed')
 
     -- the log height leaves room for the status row and the input frame
-    local chatSrc = readFile('TAC/lua/tac/chat.lua')
+    local chatSrc = readFile('MCAC/lua/mcac/chat.lua')
     assert_true(chatSrc:find('GetFrameHeightWithSpacing', 1, true) ~= nil and chatSrc:find('GetTextLineHeightWithSpacing)', 1, true) ~= nil, 'Suite 102: input row height is measured, not guessed')
     assert_true(chatSrc:find('pv(SV.WindowPadding, core.px(', 1, true) ~= nil and chatSrc:find('PopStyleVar, pushedVars', 1, true) ~= nil, 'Suite 102: compact window chrome is pushed and popped')
 
@@ -16450,22 +16453,22 @@ end)()
     beeps = 0
     mockMq.cmd = function(c) if c == '/beep' then beeps = beeps + 1 else S.cmds[#S.cmds + 1] = c end end
     local before = rt.ring.last
-    S.events.TACChatAll.fn(P('Groupguy') .. " tells the group, 'genro pull that one'")
-    S.events.TACChatAll.fn(P('Groupguy') .. " tells the group, 'Genrox is here'")
-    S.events.TACChatAll.fn("[Triune] Genro fired Distant Strike")
-    S.events.TACChatAll.fn("You tell your party, 'Genro here'")
-    S.events.TACChatAll.fn("a rat says 'Hail, Genro'")
-    S.events.TACChatAll.fn(P('Mutedguy') .. " shouts, 'Genro!'")
-    S.events.TACChatAll.fn(P('Auc') .. " auctions, 'WTS stuff'")
-    S.events.TACChatAll.fn(P('Groupguy') .. " tells the group, 'WTS Genro'")
-    S.events.TACChatAll.fn(P('Emoter') .. " waves at Genro.")
+    S.events.MCACChatAll.fn(P('Groupguy') .. " tells the group, 'genro pull that one'")
+    S.events.MCACChatAll.fn(P('Groupguy') .. " tells the group, 'Genrox is here'")
+    S.events.MCACChatAll.fn("[MCAC] Genro fired Distant Strike")
+    S.events.MCACChatAll.fn("You tell your party, 'Genro here'")
+    S.events.MCACChatAll.fn("a rat says 'Hail, Genro'")
+    S.events.MCACChatAll.fn(P('Mutedguy') .. " shouts, 'Genro!'")
+    S.events.MCACChatAll.fn(P('Auc') .. " auctions, 'WTS stuff'")
+    S.events.MCACChatAll.fn(P('Groupguy') .. " tells the group, 'WTS Genro'")
+    S.events.MCACChatAll.fn(P('Emoter') .. " waves at Genro.")
     plugin.onTick()
     local m1 = rt.ring.items[before + 1]
     assert_true(m1.mention == true and m1.notify == true and m1.hl == 'FFA040' and m1.flash == true, 'Suite 102: my name said by another player flags, colours and flashes the line (any case)')
     assert_eq(beeps, 1, 'Suite 102: mention beep uses the shared once-a-second throttle')
     for i = 2, 6 do
         local e = rt.ring.items[before + i]
-        assert_true(e.mention == nil and e.notify == nil and e.hl == nil, 'Suite 102: no mention for a longer name / Triune output / my own line / an NPC / a muted sender: ' .. e.text)
+        assert_true(e.mention == nil and e.notify == nil and e.hl == nil, 'Suite 102: no mention for a longer name / MCAC output / my own line / an NPC / a muted sender: ' .. e.text)
     end
     local m7, m8, m9 = rt.ring.items[before + 7], rt.ring.items[before + 8], rt.ring.items[before + 9]
     assert_true(m7.notify == true and m7.mention == nil and m7.hl == '00FF00', 'Suite 102: a highlight word hit is a notification too')
@@ -16487,7 +16490,7 @@ end)()
         'Suite 102: the Notifications tab rebuilds from the kept ring with every flagged line: ' .. tostring(notifySt and notifySt.last) .. ' vs ' .. keptFlagged)
     assert_true(plugin.renderLine(m1, false):find('^\a#FFA040') ~= nil, 'Suite 102: the classic renderer uses the highlight colour too')
     cfg.mention.on = false
-    S.events.TACChatAll.fn(P('Groupguy') .. " tells the group, 'Genro?'")
+    S.events.MCACChatAll.fn(P('Groupguy') .. " tells the group, 'Genro?'")
     plugin.onTick()
     assert_true(rt.ring.items[rt.ring.last].mention == nil and rt.ring.items[rt.ring.last].notify == nil, 'Suite 102: mention highlighting can be turned off')
     cfg.mention.on = true
@@ -16503,7 +16506,7 @@ end)()
     local ringBefore = rt.ring.last
     okDraw, errDraw = pcall(plugin.onDrawUI)
     assert_true(okDraw, 'Suite 102: draw with the event pump: ' .. tostring(errDraw))
-    assert_true(S.doeventsArgs and S.doeventsArgs[1] == 'TACChatAll' and S.doeventsArgs[2] == nil, 'Suite 102: the draw pump asks for the chat event only')
+    assert_true(S.doeventsArgs and S.doeventsArgs[1] == 'MCACChatAll' and S.doeventsArgs[2] == nil, 'Suite 102: the draw pump asks for the chat event only')
     assert_true(rt.ring.last == ringBefore + 1 and rt.ring.items[rt.ring.last].text == 'You receive 77 platinum.' and #rt.queue == 0, 'Suite 102: a queued line is on screen after the draw, without a core tick')
     assert_true(rt.drawPumped >= 1, 'Suite 102: pumped lines are counted')
     ctrl.show_chat = false
@@ -16744,12 +16747,12 @@ end)()
         pad:write(H.encode({ t = os.time(), channel = 'tell_in', sender = 'Pad' .. i, outgoing = false, text = 'Pad' .. i .. " tells you, 'line " .. i .. "'", raw = 'Pad' .. i .. " tells you, 'line " .. i .. "'" }), '\n')
     end
     pad:close()
-    local savedCfg = io.open(cfgDir .. '/triune_chat_Genro.lua', 'r'):read('*a')
-    local capped = io.open(cfgDir .. '/triune_chat_Genro.lua', 'w')
+    local savedCfg = io.open(cfgDir .. '/mcac_chat_Genro.lua', 'r'):read('*a')
+    local capped = io.open(cfgDir .. '/mcac_chat_Genro.lua', 'w')
     capped:write((savedCfg:gsub('(history = {%s*)lines = 1000,', '%1lines = 100,', 1)))
     capped:close()
 
-    local plugin2 = assert(loadfile('TAC/lua/tac/chat.lua'))()
+    local plugin2 = assert(loadfile('MCAC/lua/mcac/chat.lua'))()
     print = quiet
     plugin2.onInit(core)
     print = origPrint
@@ -16776,7 +16779,7 @@ end)()
     for i = ring2.first, ring2.last do if plugin2.tabAccepts(tellsTab2, ring2.items[i]) then seen = seen + 1 end end
     assert_eq(seen, 100, 'Suite 102: the Tells tab shows the restored conversation')
     -- New lines land after the restored ones and keep being logged
-    S.events.TACChatAll.fn(P('Bob') .. " tells you, 'still there?'")
+    S.events.MCACChatAll.fn(P('Bob') .. " tells you, 'still there?'")
     plugin2.onTick()
     assert_true(ring2.items[ring2.last].sender == 'Bob' and ring2.items[ring2.last].restored == nil and ring2.items[ring2.last].keepPos == ring2.last, 'Suite 102: a fresh tell lands after the restored lines')
     assert_eq(plugin2.rt.hist.fileLines, 101, 'Suite 102: the fresh tell is logged too')
@@ -16784,8 +16787,8 @@ end)()
     print = quiet
     plugin2.chatCommand('history', 'off')
     print = origPrint
-    assert_eq(plugin2.cfg.history.on, false, 'Suite 102: /tacchat history off')
-    S.events.TACChatAll.fn(P('Bob') .. " tells you, 'not logged'")
+    assert_eq(plugin2.cfg.history.on, false, 'Suite 102: /mcacchat history off')
+    S.events.MCACChatAll.fn(P('Bob') .. " tells you, 'not logged'")
     plugin2.onTick()
     assert_eq(plugin2.rt.hist.fileLines, 101, 'Suite 102: nothing logged while history is off')
     print = quiet
@@ -16797,11 +16800,11 @@ end)()
     print = quiet
     plugin2.chatCommand('history', 'on')
     print = origPrint
-    assert_eq(plugin2.cfg.history.on, true, 'Suite 102: /tacchat history on')
+    assert_eq(plugin2.cfg.history.on, true, 'Suite 102: /mcacchat history on')
     -- Clear notifications: notifications leave the kept ring and the file; tells stay
-    S.events.TACChatAll.fn(P('Alice') .. " says, 'Genro ping'")
-    S.events.TACChatAll.fn(P('Alice') .. " tells you, 'Genro a tell that mentions you'")
-    S.events.TACChatAll.fn(P('Alice') .. " tells you, 'plain tell'")
+    S.events.MCACChatAll.fn(P('Alice') .. " says, 'Genro ping'")
+    S.events.MCACChatAll.fn(P('Alice') .. " tells you, 'Genro a tell that mentions you'")
+    S.events.MCACChatAll.fn(P('Alice') .. " tells you, 'plain tell'")
     plugin2.onTick()
     local keep2 = plugin2.rt.keep
     local notes, tellsKept = 0, 0
@@ -16839,13 +16842,13 @@ end)()
     local okSettings, errSettings = pcall(plugin2.onDrawSettings)
     assert_true(okSettings, 'Suite 102: settings page renders under the mock: ' .. tostring(errSettings))
     plugin2.onDestroy()
-    os.remove(cfgDir .. '/triune_chat_Genro.lua')
+    os.remove(cfgDir .. '/mcac_chat_Genro.lua')
     os.remove(histPath)
 end)()
 
 
 -- ============================================================================
--- Suite 103: tac/gamedb.lua (Game Database plugin) — encoding, decoders, SPA
+-- Suite 103: mcac/gamedb.lua (Game Database plugin) — encoding, decoders, SPA
 -- text, index loading / search / record reads over a fixture database,
 -- navigation, commands, core wiring and the chat plugin's lookup hook
 -- ============================================================================
@@ -16868,7 +16871,7 @@ end)()
     }, { __index = function() return function() end end })
 
     print = quiet
-    local plugin = assert(loadfile('TAC/lua/tac/gamedb.lua'))()
+    local plugin = assert(loadfile('MCAC/lua/mcac/gamedb.lua'))()
     print = origPrint
     local ENC, D, DB = plugin.ENC, plugin.D, plugin.DB
 
@@ -16932,7 +16935,7 @@ end)()
     assert_eq(D.spaText(999, 1, 2, 3), 'SPA 999: base 1, limit 2, max 3', 'Suite 103: unknown SPA prints raw values')
 
     -- 4. fixture database
-    local root = (os.getenv('TMPDIR') or '/tmp') .. '/tac_gamedb_test_' .. tostring(os.time())
+    local root = (os.getenv('TMPDIR') or '/tmp') .. '/mcac_gamedb_test_' .. tostring(os.time())
     local dir = root .. '/gamedb/'
     os.execute('mkdir -p "' .. dir .. '"')
     local function writeFile(name, lines)
@@ -17447,8 +17450,8 @@ end)()
     assert_eq(plugin.spellLink(424242), nil, 'Suite 103: spellLink declines an unknown spell')
     assert_eq(plugin.spellLinkId('[Complete Heal]'), 13, 'Suite 103: spellLinkId resolves a bracketed known name')
     assert_eq(plugin.spellLinkId('[complete heal]'), 13, 'Suite 103: spellLinkId is case-insensitive')
-    assert_eq(plugin.spellLinkId('[Triune]'), nil, 'Suite 103: other bracketed text is not a spell')
-    assert_eq(select(2, plugin.spellLinkId('[Triune]')), true, 'Suite 103: and reports the index as ready')
+    assert_eq(plugin.spellLinkId('[MCAC]'), nil, 'Suite 103: other bracketed text is not a spell')
+    assert_eq(select(2, plugin.spellLinkId('[MCAC]')), true, 'Suite 103: and reports the index as ready')
     assert_eq(plugin.spellLinkId('Complete Heal'), nil, 'Suite 103: unbracketed text is never a spell link')
     assert_eq(D.npcLinkText(6, 'Crow', 'North Qeynos'), '[Crow (North Qeynos)]', 'Suite 103: NPC link is the name with the zone in parentheses')
     assert_eq(D.npcLinkText(6, 'Crow', ''), '[Crow]', 'Suite 103: NPC link without a zone is the bare name')
@@ -17463,7 +17466,7 @@ end)()
     assert_eq(plugin.npcLinkId('Crow'), nil, 'Suite 103: unbracketed text is never an NPC link')
     assert_eq(select(1, plugin.textLinkTarget('[Complete Heal]')) .. select(2, plugin.textLinkTarget('[Complete Heal]')), 'spells13', 'Suite 103: textLinkTarget finds spells')
     assert_eq(select(1, plugin.textLinkTarget('[Crow (North Qeynos)]')) .. select(2, plugin.textLinkTarget('[Crow (North Qeynos)]')), 'npcs6', 'Suite 103: textLinkTarget finds NPCs')
-    local tk, tid, tready = plugin.textLinkTarget('[Triune]')
+    local tk, tid, tready = plugin.textLinkTarget('[MCAC]')
     assert_true(tk == nil and tid == nil and tready == true, 'Suite 103: textLinkTarget reports nothing, ready, for other brackets')
     assert_eq(select(3, plugin.textLinkTarget('plain')), true, 'Suite 103: unbracketed text is ready and nothing')
     assert_eq(plugin.lookupId('npcs', 'crow'), 6, 'Suite 103: lookupId finds NPCs by name')
@@ -17515,7 +17518,7 @@ end)()
     core.ImGui.SetClipboardText = nil
     core.mq.cmdf = nil
     print = origPrint
-    local gsrcLink = readFile('TAC/lua/tac/gamedb.lua')
+    local gsrcLink = readFile('MCAC/lua/mcac/gamedb.lua')
     assert_true(gsrcLink:find("drawLinkButton('items', card.fullId, st.key or 'main')", 1, true) ~= nil, 'Suite 103: item cards carry the Link to chat button')
     assert_true(gsrcLink:find("drawLinkButton('spells', id, st.key or 'main')", 1, true) ~= nil, 'Suite 103: spell cards carry the Link to chat button')
     assert_true(gsrcLink:find("drawLinkButton('npcs', id, st.key or 'main')", 1, true) ~= nil, 'Suite 103: NPC cards carry the Link to chat button')
@@ -17532,7 +17535,7 @@ end)()
     os.execute('rm -rf "' .. root .. '"')
 
     -- 7. core wiring and the chat hook
-    local src = readFile('TAC/lua/triune/init.lua')
+    local src = readFile('MCAC/lua/mcac/init.lua')
     assert_true(src:find('        show_gamedb              = false,', 1, true) ~= nil, 'Suite 103: defaultCtrl seeds show_gamedb')
     assert_true(src:find('if c.show_gamedb == nil then c.show_gamedb = false end', 1, true) ~= nil, 'Suite 103: sanitize seeds show_gamedb')
     assert_true(src:find("'gamedb.lua',", 1, true) ~= nil, 'Suite 103: discover() known-plugin probe lists gamedb.lua')
@@ -17573,14 +17576,14 @@ end)()
         trk.knownImmunity = nil
         assert_eq(trk.isLockedOut('Mesmerize', 57, 'debuff'), false, 'Suite 103: without the hook the tracker behaves as before')
     end
-    local gsrc = readFile('TAC/lua/tac/gamedb.lua')
+    local gsrc = readFile('MCAC/lua/mcac/gamedb.lua')
     for _, bad in ipairs({ 'mq.delay(', 'mq.doevents()', 'require(', 'io.popen', 'os.execute' }) do
         assert_true(gsrc:find(bad, 1, true) == nil, 'Suite 103: gamedb.lua does not use ' .. bad)
     end
     assert_true(gsrc:find('core.pushTheme()', 1, true) ~= nil, 'Suite 103: gamedb.lua uses the core theme')
     assert_true(gsrc:find("flag = 'show_gamedb'", 1, true) ~= nil and gsrc:find('headerButton = true', 1, true) ~= nil, 'Suite 103: window metadata drives the header button')
     print = quiet
-    local chat = assert(loadfile('TAC/lua/tac/chat.lua'))()
+    local chat = assert(loadfile('MCAC/lua/mcac/chat.lua'))()
     print = origPrint
     assert_eq(chat.linkItemId('0000FBFA4' .. string.rep('0', 68)), 1032100, 'Suite 103: chat link payload carries the item id in hex (Earthen Bracer of Fortitude, Enchanted)')
     -- clicking a chat link opens a database card when the plugin is available
@@ -17616,7 +17619,7 @@ end)()
     assert_true(chat.rt.echo:find("Said 'Respawning'", 1, true) ~= nil, 'Suite 103: the status line reports the say')
     assert_true(not chat.lookupInDatabase(saylink), 'Suite 103: Look up in Database refuses a dialogue link')
     chat.cfg.saylinkId = 424242
-    assert_true(not chat.isSaylink(saylink), 'Suite 103: /tacchat saylink <id> moves the proxy id')
+    assert_true(not chat.isSaylink(saylink), 'Suite 103: /mcacchat saylink <id> moves the proxy id')
     chat.cfg.saylinkId = 999999
     assert_true(chat.lookupInDatabase({ name = 'x', payload = '00000F23C' .. string.rep('0', 68) }), 'Suite 103: Look up in Database resolves by id')
     -- links handed in by the database land in the input line as [Name] and
@@ -17778,9 +17781,9 @@ end)()
     chat.tokenize(itemAndSpell)
     assert_eq(#itemAndSpell.links, 2, 'Suite 103: item and text links share one link list')
     assert_eq(itemAndSpell.links[1].name .. '|' .. tostring(itemAndSpell.links[2].dbId), bracer .. '|13', 'Suite 103: item link first, spell link second')
-    local triuneLine = { raw = '[Triune] cast [Complete Heal]', text = '', id = 4, channel = 'triune' }
-    chat.tokenize(triuneLine)
-    assert_eq(#triuneLine.links, 0, 'Suite 103: Triune output lines are never scanned for text links')
+    local mcacLine = { raw = '[MCAC] cast [Complete Heal]', text = '', id = 4, channel = 'mcac' }
+    chat.tokenize(mcacLine)
+    assert_eq(#mcacLine.links, 0, 'Suite 103: MCAC output lines are never scanned for text links')
     dbReady = false
     chat.rt.textIndexReady = nil
     local early = { raw = 'early [Complete Heal] line', text = '', id = 3 }
@@ -17814,26 +17817,26 @@ end)()
     assert_eq(chat.linkItemId('000000000'), nil, 'Suite 103: zero id is not a link id')
     assert_eq(chat.linkItemId('1'), nil, 'Suite 103: short payload has no id')
     assert_true(chat.uses and chat.uses.gamedb ~= nil, 'Suite 103: chat declares its gamedb use')
-    local csrc = readFile('TAC/lua/tac/chat.lua')
+    local csrc = readFile('MCAC/lua/mcac/chat.lua')
     assert_true(csrc:find("'Look up in Database'", 1, true) ~= nil, 'Suite 103: chat tab menu offers the database lookup')
-    local isrc = readFile('TAC/lua/tac/inventory.lua')
+    local isrc = readFile('MCAC/lua/mcac/inventory.lua')
     assert_true(isrc:find('db.itemSummary(it.id)', 1, true) ~= nil, 'Suite 103: inventory tooltips show the database summary')
     assert_true(select(2, isrc:gsub('shiftHeld%(%) and openDatabaseCard%(it%)', '')) == 2, 'Suite 103: bag and bank slots open the card on Shift+Right-click')
     assert_true(isrc:find('if ImGui.IsItemClicked(1) then openDatabaseCard(it) end', 1, true) ~= nil, 'Suite 103: list rows open the card on right-click')
     assert_true(isrc:find("gamedb = 'Database lines in item tooltips", 1, true) ~= nil, 'Suite 103: inventory declares its gamedb use')
-    local msrc = readFile('TAC/lua/tac/map.lua')
+    local msrc = readFile('MCAC/lua/mcac/map.lua')
     assert_true(msrc:find('function plugin.showZone(zoneShort)', 1, true) ~= nil, 'Suite 103: map plugin exposes showZone for NPC spawn rows')
     assert_true(gsrc:find("map.showZone(s[1])", 1, true) ~= nil, 'Suite 103: NPC spawn rows carry a Map button')
-    local ssrc = readFile('TAC/lua/tac/spellbook.lua')
+    local ssrc = readFile('MCAC/lua/mcac/spellbook.lua')
     assert_true(ssrc:find('db.spellSummary(dbId)', 1, true) ~= nil and ssrc:find("db.popout('spells', dbId)", 1, true) ~= nil, 'Suite 103: spellbook tooltips use the database summary and middle-click cards')
 end)()
 
 
 -- ==========================================================================
--- Suite 104: Diagnostic logger (tac/triune_log.lua) + core wiring
+-- Suite 104: Diagnostic logger (mcac/mcac_log.lua) + core wiring
 -- ==========================================================================
 ;(function()
-    print('--- Suite 104: Diagnostic logger (tac/triune_log.lua) ---')
+    print('--- Suite 104: Diagnostic logger (mcac/mcac_log.lua) ---')
     -- configDir '.' -> resolveDir probes ./../Logs (absent here) and falls
     -- back to '.', so the files land in the repo root; removed at the end.
     local L = tlog
@@ -17844,7 +17847,7 @@ end)()
         getDebug = function() return dbgOn end, identity = function() return 'TestSrv', 'Suite104' end,
         headerInfo = function() return { { 'class', 'WAR' } } end,
     })
-    assert_eq(L.stripColors('\ag[Triune]\ax hi \a#FF00AAx \a-r y'), '[Triune] hi x  y', 'Suite 104: MQ colour codes are stripped')
+    assert_eq(L.stripColors('\ag[MCAC]\ax hi \a#FF00AAx \a-r y'), '[MCAC] hi x  y', 'Suite 104: MQ colour codes are stripped')
 
     L.debug('t', 'dropped %d', 1)
     dbgOn = true
@@ -17852,23 +17855,23 @@ end)()
     L.info('t', 'info %s', 'x')
     L.warn('t', 'plain')
     L.info('t', 'bad %d', 'notnum')
-    L.capturePrint('\ar[Triune]\ax red line')
+    L.capturePrint('\ar[MCAC]\ax red line')
     local r = L.recent()
     assert_eq(#r, 5, 'Suite 104: debug lines are dropped while Debug Mode is off, everything else is kept')
     assert_true(r[1]:find('DBG %[t%] kept 2') ~= nil, 'Suite 104: debug line kept once Debug Mode is on')
     assert_true(r[4]:find('bad %%d notnum') ~= nil, 'Suite 104: a bad format string never throws')
-    assert_true(r[5]:find('WRN %[chat%] %[Triune%] red line') ~= nil, 'Suite 104: captured red print lines are classed as warnings')
+    assert_true(r[5]:find('WRN %[chat%] %[MCAC%] red line') ~= nil, 'Suite 104: captured red print lines are classed as warnings')
     assert_true(not L.isFileOpen(), 'Suite 104: no file while Log To File is off')
 
     fileOn = true
     L.tick()
     assert_true(L.isFileOpen(), 'Suite 104: tick opens the file once Log To File is on: ' .. tostring(L.lastOpenError()))
     local path = L.currentFilePath()
-    assert_true(path ~= nil and path:find('triune_TestSrv_Suite104%.log$') ~= nil, 'Suite 104: file named after server + character: ' .. tostring(path))
+    assert_true(path ~= nil and path:find('mcac_TestSrv_Suite104%.log$') ~= nil, 'Suite 104: file named after server + character: ' .. tostring(path))
     L.info('t', 'live line')
     L.flush()
     local content = readFile(path)
-    assert_true(content:find('==== Triune vT log session', 1, true) ~= nil, 'Suite 104: session header written')
+    assert_true(content:find('==== MCAC vT log session', 1, true) ~= nil, 'Suite 104: session header written')
     assert_true(content:find('class:%s+WAR') ~= nil, 'Suite 104: header rows come from headerInfo()')
     assert_true(content:find('5 buffered lines', 1, true) ~= nil, 'Suite 104: ring contents replayed on open')
     assert_true(content:find('live line', 1, true) ~= nil, 'Suite 104: live lines appended')
@@ -17894,7 +17897,7 @@ end)()
     L._reset()
 
     -- Core wiring
-    assert_true(src:find("local tlog              = require('tac.triune_log')", 1, true) ~= nil, 'Suite 104: triune.lua loads the logger')
+    assert_true(src:find("local tlog              = require('mcac.mcac_log')", 1, true) ~= nil, 'Suite 104: mcac.lua loads the logger')
     assert_true(src:find('tlog.hookPrint()', 1, true) ~= nil, 'Suite 104: print() is hooked so existing output is captured')
     assert_true(src:find('log_to_file              = false,', 1, true) ~= nil, 'Suite 104: log_to_file has a ctrl default')
     assert_true(src:find('log                   = tlog,', 1, true) ~= nil, 'Suite 104: plugins get core.log')
@@ -18051,7 +18054,7 @@ end)()
     -- every hooked plugin window: flags through the core, pre-End hook before End
     local hooked = { 'auto_accept', 'boxnet', 'hud_spellgems', 'buffbot', 'hud_cooldowns', 'hud_unitframes', 'cursor', 'hud_effects', 'hud_xtarget', 'auto_aa', 'spellbook', 'hud_group', 'dps', 'inventory', 'gamedb', 'map', 'buttons' }
     for _, f in ipairs(hooked) do
-        local psrc = readFile('TAC/lua/tac/' .. f .. '.lua')
+        local psrc = readFile('MCAC/lua/mcac/' .. f .. '.lua')
         assert_true(psrc:find('core.windowFlags(', 1, true) ~= nil, 'Suite 106: ' .. f .. ' passes its window flags through core.windowFlags')
         assert_true(psrc:find('core.preEndWindow(', 1, true) ~= nil, 'Suite 106: ' .. f .. ' calls core.preEndWindow before End')
         local nPre = select(2, psrc:gsub('core%.preBeginWindow%(', ''))
@@ -18059,11 +18062,11 @@ end)()
         assert_true(nEnd >= nPre, 'Suite 106: ' .. f .. ' has a pre-End call for each hooked window (' .. nEnd .. ' vs ' .. nPre .. ')')
     end
     for _, f in ipairs({ 'hud_effects', 'hud_unitframes', 'hud_spellgems', 'hud_xtarget', 'hud_group', 'buttons' }) do
-        local psrc = readFile('TAC/lua/tac/' .. f .. '.lua')
+        local psrc = readFile('MCAC/lua/mcac/' .. f .. '.lua')
         assert_true(psrc:find('core.drawWindowMenuItems(', 1, true) ~= nil and psrc:find("core%.preEndWindow%([^)]-, true%)") ~= nil, 'Suite 106: ' .. f .. ' folds the shared items into its own menu and keeps the core one off')
     end
     for _, f in ipairs({ 'hud_effects', 'hud_unitframes', 'hud_spellgems', 'hud_xtarget', 'hud_group', 'hud_cooldowns' }) do
-        assert_true(readFile('TAC/lua/tac/' .. f .. '.lua'):find('core.windowBgAlpha(', 1, true) ~= nil, 'Suite 106: ' .. f .. ' opacity rides the ghost fade')
+        assert_true(readFile('MCAC/lua/mcac/' .. f .. '.lua'):find('core.windowBgAlpha(', 1, true) ~= nil, 'Suite 106: ' .. f .. ' opacity rides the ghost fade')
     end
 
     -- 2. Options and flags
@@ -18160,15 +18163,15 @@ end)()
         'Suite 106: menu offers title bar, ghost, lock, layout and close')
     S.released = false
     S.clicks = { ['Hide title bar'] = true }
-    S.opened = '##tacWindowMenu_plain'
+    S.opened = '##mcacWindowMenu_plain'
     UI.pushTheme(); UI.preBeginWindow('plain'); UI.postBeginWindow('plain'); UI.preEndWindow('plain'); UI.popTheme()
     assert_true(ctrl.window_opts.plain and ctrl.window_opts.plain.notitle == true, 'Suite 106: Hide title bar from the menu sets the option')
     S.clicks = { ['Close window'] = true }
-    S.opened = '##tacWindowMenu_plain'
+    S.opened = '##mcacWindowMenu_plain'
     UI.pushTheme(); UI.preBeginWindow('plain'); UI.postBeginWindow('plain'); UI.preEndWindow('plain'); UI.popTheme()
     assert_eq(S.open, false, 'Suite 106: Close window closes through the Window Layout entry')
     S.clicks = { ['Lock position & size'] = true }
-    S.opened = '##tacWindowMenu_group'
+    S.opened = '##mcacWindowMenu_group'
     UI.pushTheme(); UI.preBeginWindow('group'); UI.postBeginWindow('group'); UI.preEndWindow('group'); UI.popTheme()
     assert_true(S.locked == true and ctrl.window_opts.group == nil, 'Suite 106: a window with its own lock locks through it, not the core option')
     S.clicks = {}
@@ -18212,20 +18215,20 @@ end)()
     UI.popTheme()
     assert_eq(#S.cols, 0, 'Suite 106: theme scope balanced across three cards')
     UI.setWindowOpt('gamedb_pop', 'ghost', false)
-    local dsrc = readFile('TAC/lua/tac/dps.lua')
+    local dsrc = readFile('MCAC/lua/mcac/dps.lua')
     assert_true(dsrc:find("core.preBeginWindow('dps_compact')", 1, true) ~= nil and dsrc:find("core.windowFlags('dps_compact', flags)", 1, true) ~= nil and dsrc:find("name = 'DPS compact window', onClose = closeCompact", 1, true) ~= nil,
         'Suite 106: the DPS compact window has its own layout key with the shared options and menu')
-    local gsrc = readFile('TAC/lua/tac/gamedb.lua')
+    local gsrc = readFile('MCAC/lua/mcac/gamedb.lua')
     assert_true(gsrc:find("core.preBeginWindow('gamedb_pop')", 1, true) ~= nil and gsrc:find("core.postEndWindow('gamedb_pop')", 1, true) ~= nil, 'Suite 106: database cards share one key and pop per card')
 end)()
 
 -- ============================================================================
--- Suite 107: Update Checker plugin (tac/update_check.lua) -- version compare,
+-- Suite 107: Update Checker plugin (mcac/update_check.lua) -- version compare,
 -- release JSON parsing, settings round-trip, and the non-blocking contract.
 -- ============================================================================
 do
     print('--- Suite 107: Update Checker plugin ---')
-    local P = assert(loadfile('TAC/lua/tac/update_check.lua'))()
+    local P = assert(loadfile('MCAC/lua/mcac/update_check.lua'))()
     assert_eq(P.id, 'update_check', 'Suite 107: plugin id')
     assert_true(P.onInit ~= nil and P.onTick ~= nil and P.onDrawUI ~= nil and P.onDrawSettings ~= nil and P.onDestroy ~= nil
         and P.onCommand ~= nil and P.onSaveSettings ~= nil and P.onLoadSettings ~= nil, 'Suite 107: full plugin lifecycle')
@@ -18244,7 +18247,7 @@ do
 
     -- Release JSON: only what the GitHub /releases/latest payload provides
     local payload = '{"url":"https://api.github.com/x","tag_name":"V2.16","name":"Release \\"V2.16\\"",'
-        .. '"html_url":"https://github.com/gennro/TriuneAutocombat/releases/tag/V2.16","published_at":"2026-09-20T10:00:00Z",'
+        .. '"html_url":"https://github.com/Vaughnstrosity/Multi-Class-Auto-Combat/releases/tag/V2.16","published_at":"2026-09-20T10:00:00Z",'
         .. '"body":"## 2026-09-20\\n\\n- **Thing** (`x.lua`).\\n  - Detail with a } brace\\n\\n---\\n\\n## Install\\n1. ignore","assets":[{"name":"a.zip"}]}'
     assert_true(P.jsonComplete(payload), 'Suite 107: complete payload passes jsonComplete')
     assert_true(not P.jsonComplete(payload:sub(1, #payload - 5)), 'Suite 107: truncated payload fails jsonComplete')
@@ -18272,7 +18275,7 @@ do
     assert_true(P.onCommand('nope', { 'nope' }) == false, 'Suite 107: unrelated commands are not claimed')
 
     -- Non-blocking contract: no process spawn, no mq.delay, async COM polling
-    local src = readFile('TAC/lua/tac/update_check.lua')
+    local src = readFile('MCAC/lua/mcac/update_check.lua')
     assert_true(src:find('io.popen', 1, true) == nil and src:find('os.execute', 1, true) == nil,
         'Suite 107: the update checker never spawns a process')
     assert_true(src:find('mq.delay', 1, true) == nil, 'Suite 107: the update checker never calls mq.delay')
@@ -18369,7 +18372,7 @@ do
     end
 
     local function loadInv()
-        local fn = assert(loadfile('TAC/lua/tac/inventory.lua'))
+        local fn = assert(loadfile('MCAC/lua/mcac/inventory.lua'))
         local origPrint = print
         print = quietPrint
         local ok, inst = pcall(fn)
@@ -18799,9 +18802,9 @@ do
         assert_eq(ctrl.show_inv, not shown, 'Suite 108: window toggled')
         assert_true(inv.onCommand('dps', { 'dps' }) == false, 'Suite 108: other commands ignored')
         -- Boxnet exposes the trust check the give handler relies on
-        local bsrc = readFile('TAC/lua/tac/boxnet.lua')
+        local bsrc = readFile('MCAC/lua/mcac/boxnet.lua')
         assert_true(bsrc:find('function api.trusted(sender, payload)', 1, true) ~= nil, 'Suite 108: boxnet publishes api.trusted')
-        local isrc = readFile('TAC/lua/tac/inventory.lua')
+        local isrc = readFile('MCAC/lua/mcac/inventory.lua')
         assert_true(isrc:find('mq.delay(', 1, true) == nil, 'Suite 108: the give workflow never blocks the core with mq.delay')
         assert_true(select(2, isrc:gsub('UI%.drawBagGrid%(', '')) >= 5, 'Suite 108: one bag grid renderer serves bags, bank, shared bank and peers')
         assert_true(isrc:find("BeginTabItem(\"Box Inventories##tabBoxes\")", 1, true) ~= nil, 'Suite 108: the Box Inventories tab is registered')
@@ -18812,7 +18815,7 @@ end
 
 
 -- ============================================================================
--- Suite 109: NMS Loot plugin (tac/nmsloot.lua) -- reply parsing, #nms line
+-- Suite 109: NMS Loot plugin (mcac/nmsloot.lua) -- reply parsing, #nms line
 -- building, /ac nms argument parsing, reply capture window, Box Network
 -- state sharing / remote requests / trust, settings round-trip.
 -- ============================================================================
@@ -18866,7 +18869,7 @@ do
     end
 
     local function loadNms()
-        local fn = assert(loadfile('TAC/lua/tac/nmsloot.lua'))
+        local fn = assert(loadfile('MCAC/lua/mcac/nmsloot.lua'))
         local origPrint = print
         print = quietPrint
         local ok, inst = pcall(fn)
@@ -19063,7 +19066,7 @@ do
         nms.wallClock = function() return w.wall end
         nms.onInit(core)
         assert_eq(ctrl.show_nmsloot, false, 'Suite 109: window flag seeded')
-        assert_true(w.events.TacNmsLootAll ~= nil, 'Suite 109: catch-all chat event registered')
+        assert_true(w.events.McacNmsLootAll ~= nil, 'Suite 109: catch-all chat event registered')
         assert_true(bn.subs['nmsloot:state'] and bn.subs['nmsloot:who'] and bn.subs['nmsloot:run'], 'Suite 109: boxnet subscriptions in place')
 
         -- first tick: status query (statusOnInit) and a who broadcast
@@ -19073,21 +19076,21 @@ do
         assert_true(nms.state.pending ~= nil and nms.state.pending.spec.sub == 'status', 'Suite 109: a reply window is open')
 
         -- server replies: we are the looter (the real reply wording)
-        w.events.TacNmsLootAll('[NMS] Active looter: you.')
+        w.events.McacNmsLootAll('[NMS] Active looter: you.')
         assert_eq(nms.state.looter, 'Tank', 'Suite 109: "You" resolves to this character')
-        w.events.TacNmsLootAll('[NMS] Offers waiting: 0 (0 items).')
+        w.events.McacNmsLootAll('[NMS] Offers waiting: 0 (0 items).')
         assert_eq(nms.state.offerCount, 0, 'Suite 109: offer count from the status reply')
         assert_eq(nms.state.wantList, false, 'Suite 109: nothing waiting, no list')
         assert_eq(nms.state.looterFrom, 'server', 'Suite 109: source is the server')
         assert_true(nms.state.net.dirty, 'Suite 109: a change marks the state dirty')
         -- our own announce line must not be re-parsed
-        w.events.TacNmsLootAll('[Triune NMS] Active looter is now Bob.')
+        w.events.McacNmsLootAll('[MCAC NMS] Active looter is now Bob.')
         assert_eq(nms.state.looter, 'Tank', 'Suite 109: own tagged prints are skipped')
-        w.events.TacNmsLootAll("You say, '#nms status'")
+        w.events.McacNmsLootAll("You say, '#nms status'")
         assert_eq(nms.state.looter, 'Tank', 'Suite 109: the echoed say line is skipped')
-        w.events.TacNmsLootAll('[MQ2Nav] Navigating to loot ' .. itemLink('Rusty Sword'))
+        w.events.McacNmsLootAll('[MQ2Nav] Navigating to loot ' .. itemLink('Rusty Sword'))
         assert_eq(#nms.state.offers, 0, 'Suite 109: MQ2Nav output is skipped even with a link in it')
-        w.events.TacNmsLootAll('[MQ2Nav] The active looter is Bob')
+        w.events.McacNmsLootAll('[MQ2Nav] The active looter is Bob')
         assert_eq(nms.state.looter, 'Tank', 'Suite 109: MQ2Nav output never sets the looter')
 
         -- reply window closes after CAPTURE_SEC and the state is broadcast
@@ -19113,10 +19116,10 @@ do
         assert_eq(nms.state.peers.sam.looter, 'Sam', 'Suite 109: ...but the peer row remembers what Sam thinks')
         -- a server line always wins
         w.wall = 1020
-        w.events.TacNmsLootAll('The active looter is Sam.')
+        w.events.McacNmsLootAll('The active looter is Sam.')
         assert_eq(nms.state.looter, 'Sam', 'Suite 109: server line adopted')
         assert_eq(nms.state.looterAsOf, 1020, 'Suite 109: server line stamps the time')
-        w.events.TacNmsLootAll('No one holds the active looter slot.')
+        w.events.McacNmsLootAll('No one holds the active looter slot.')
         assert_eq(nms.state.looter, '', 'Suite 109: nobody')
 
         -- who request from a peer answers with our state (rate limited)
@@ -19129,8 +19132,8 @@ do
         -- a status that reports offers waiting fetches the list by itself
         w.cmds = {}
         nms.runOn(nil, { sub = 'status' })
-        w.events.TacNmsLootAll('[NMS] Active looter: you.')
-        w.events.TacNmsLootAll('[NMS] Offers waiting: 1 (2 items).')
+        w.events.McacNmsLootAll('[NMS] Active looter: you.')
+        w.events.McacNmsLootAll('[NMS] Offers waiting: 1 (2 items).')
         assert_eq(nms.state.offerCount, 1, 'Suite 109: offers waiting counted')
         assert_eq(nms.state.itemCount, 2, 'Suite 109: items counted')
         assert_true(nms.state.wantList, 'Suite 109: a list is wanted')
@@ -19144,10 +19147,10 @@ do
         w.cmds = {}
         assert_true(nms.runOn(nil, { sub = 'list' }), 'Suite 109: local list sent')
         assert_eq(w.cmds[1], '/say #nms list', 'Suite 109: list line')
-        w.events.TacNmsLootAll('[NMS] Offers waiting: 1 (3 items).')
-        w.events.TacNmsLootAll('[NMS Loot] offer 1748 slot 65535 id 12428 qty 1 "Rusty Sword"')
-        w.events.TacNmsLootAll('[NMS Loot] offer 1748 slot 65534 id 1001 qty 3 "Peridot"')
-        w.events.TacNmsLootAll('2. Fine Steel Dagger x1')
+        w.events.McacNmsLootAll('[NMS] Offers waiting: 1 (3 items).')
+        w.events.McacNmsLootAll('[NMS Loot] offer 1748 slot 65535 id 12428 qty 1 "Rusty Sword"')
+        w.events.McacNmsLootAll('[NMS Loot] offer 1748 slot 65534 id 1001 qty 3 "Peridot"')
+        w.events.McacNmsLootAll('2. Fine Steel Dagger x1')
         assert_eq(#nms.state.offers, 0, 'Suite 109: offers replace the list only when the reply window closes')
         w.nowMs = w.nowMs + 2500
         nms.tick()
@@ -19160,23 +19163,23 @@ do
         assert_eq(nms.state.wantList, false, 'Suite 109: the count inside a list reply does not queue another list')
         nms.state.offers[3] = nil
         -- echo offer outside a window adds; resolution removes
-        w.events.TacNmsLootAll('[NMS Loot] offer 1750 slot 65535 id 5 qty 1 "Fine Steel Dagger"')
+        w.events.McacNmsLootAll('[NMS Loot] offer 1750 slot 65535 id 5 qty 1 "Fine Steel Dagger"')
         assert_eq(#nms.state.offers, 3, 'Suite 109: an echoed offer is added')
         assert_eq(nms.state.offers[3].handle, '1750', 'Suite 109: echoed offer keeps its handle')
-        w.events.TacNmsLootAll('[NMS Loot] sold "Rusty Sword" x1 for 3 platinum')
+        w.events.McacNmsLootAll('[NMS Loot] sold "Rusty Sword" x1 for 3 platinum')
         assert_eq(#nms.state.offers, 2, 'Suite 109: an auto-sold item leaves the list')
-        w.events.TacNmsLootAll('[NMS Loot] sold "Something Else" x1 for 3 platinum')
+        w.events.McacNmsLootAll('[NMS Loot] sold "Something Else" x1 for 3 platinum')
         assert_eq(#nms.state.offers, 2, 'Suite 109: ...and adds nothing')
-        w.events.TacNmsLootAll('[NMS Loot] offer 1749 slot 65535 id 7 qty 1 "Rusty Sword"')
+        w.events.McacNmsLootAll('[NMS Loot] offer 1749 slot 65535 id 7 qty 1 "Rusty Sword"')
         assert_eq(#nms.state.offers, 3, 'Suite 109: a fresh offer of the same item is its own row')
-        w.events.TacNmsLootAll('[NMS Loot] offer 1749 kept')
+        w.events.McacNmsLootAll('[NMS Loot] offer 1749 kept')
         assert_eq(#nms.state.offers, 2, 'Suite 109: a handled line with only the handle removes that row')
-        w.events.TacNmsLootAll('[NMS Loot] offer 1750 slot 65535 id 5 qty 1 "Fine Steel Dagger"')
+        w.events.McacNmsLootAll('[NMS Loot] offer 1750 slot 65535 id 5 qty 1 "Fine Steel Dagger"')
         assert_eq(#nms.state.offers, 2, 'Suite 109: the same offer twice is one row')
         assert_true(bn.broadcasts ~= nil, 'Suite 109: (state sharing continues)')
         local payload = nms.statePayload()
         assert_eq(payload.offers[2].h, '1750', 'Suite 109: handles travel to the other boxes')
-        w.events.TacNmsLootAll('Loot echo is now on.')
+        w.events.McacNmsLootAll('Loot echo is now on.')
         assert_eq(nms.state.echo, true, 'Suite 109: echo state from the server')
 
         -- loot action locally and remotely
@@ -19220,7 +19223,7 @@ do
 
         -- holder re-broadcast
         w.wall = 2000
-        w.events.TacNmsLootAll('You are the active looter.')
+        w.events.McacNmsLootAll('You are the active looter.')
         w.nowMs = w.nowMs + 3000
         nms.state.pending = nil
         nms.tick()
@@ -19281,7 +19284,7 @@ do
         assert_true(nms.onCommand('parcels', { 'parcels' }) == false, 'Suite 109: other commands ignored')
 
         nms.onDestroy()
-        assert_nil(w.events.TacNmsLootAll, 'Suite 109: chat event released on destroy')
+        assert_nil(w.events.McacNmsLootAll, 'Suite 109: chat event released on destroy')
         assert_nil(bn.subs['nmsloot:state'], 'Suite 109: boxnet subscriptions released on destroy')
     end
 
@@ -19295,7 +19298,7 @@ do
         assert_eq(w.cmds[1], '/say #nms status', 'Suite 109: status query without boxnet')
         local ok, why = nms.runOn('Bob', { sub = 'claim' })
         assert_true(ok == false and why:find('Box Network', 1, true) ~= nil, 'Suite 109: remote request without boxnet is explained')
-        w.events.TacNmsLootAll('The active looter is Solo.')
+        w.events.McacNmsLootAll('The active looter is Solo.')
         assert_eq(nms.state.looter, 'Solo', 'Suite 109: local parsing still works')
         w.nowMs = w.nowMs + 3000
         nms.tick()
@@ -19304,10 +19307,10 @@ do
 
     -- 5. Core wiring
     do
-        local t = readFile('TAC/lua/triune/init.lua')
+        local t = readFile('MCAC/lua/mcac/init.lua')
         assert_true(t:find("'nmsloot.lua',", 1, true) ~= nil, 'Suite 109: discover() known-plugin probe lists nmsloot.lua')
         assert_true(t:find('if c.show_nmsloot == nil then c.show_nmsloot = false end', 1, true) ~= nil, 'Suite 109: sanitize seeds show_nmsloot')
-        local psrc = readFile('TAC/lua/tac/nmsloot.lua')
+        local psrc = readFile('MCAC/lua/mcac/nmsloot.lua')
         assert_true(psrc:find('mq.delay(', 1, true) == nil, 'Suite 109: the plugin never blocks the core')
         assert_true(psrc:find("mq.cmdf('/say #nms %s', line)", 1, true) ~= nil, 'Suite 109: #nms goes out through /say like every other server command')
         assert_true(select(2, psrc:gsub("mq%.cmdf?%(", '')) == 1, 'Suite 109: nmsLine() is the only way a #nms line is typed')
@@ -19720,7 +19723,7 @@ do
             saveLoadout = function() end, colors = {} }
         local origPrint = print
         print = quietPrint
-        local P = assert(loadfile('TAC/lua/tac/auto_aa.lua'))()
+        local P = assert(loadfile('MCAC/lua/mcac/auto_aa.lua'))()
         P.onInit(W.core)
         print = origPrint
         W.P, W.AA = P, P.AA
@@ -20094,7 +20097,7 @@ do
     local apply = src:match('function runtime%.applyEntry%(e%).-\nend\n')
     assert_true(apply:find('ctrl.hunter_combat_loc = nil\n        runtime.loadZoneAnchor()', 1, true) ~= nil,
         'Suite 112: loading the loadout restores this zone\'s anchor')
-    assert_true(src:find('if runtime.loadZoneAnchor() then\n        print(string.format(\'\\ag[Triune]\\ax Loaded saved combat anchor for %s', 1, true) ~= nil,
+    assert_true(src:find('if runtime.loadZoneAnchor() then\n        print(string.format(\'\\ag[MCAC]\\ax Loaded saved combat anchor for %s', 1, true) ~= nil,
         'Suite 112: zoning in restores the zone\'s anchor')
     local _, zoneSaves = src:gsub('runtime%.saveZoneAnchor%(%)', '')
     assert_true(zoneSaves >= 3, 'Suite 112: Set / Clear / radius all update the zone entry')
@@ -20102,7 +20105,7 @@ end
 
 
 -- ============================================================================
--- Suite 113: GM Commands plugin (tac/gm_commands.lua) -- reference data,
+-- Suite 113: GM Commands plugin (mcac/gm_commands.lua) -- reference data,
 -- argument parsing, line building, danger marks, search, the /say send path,
 -- confirmation, history / favourites round-trip, /ac gm, off by default.
 -- ============================================================================
@@ -20150,7 +20153,7 @@ do
     end
 
     local function loadGm()
-        local fn = assert(loadfile('TAC/lua/tac/gm_commands.lua'))
+        local fn = assert(loadfile('MCAC/lua/mcac/gm_commands.lua'))
         local ok, inst = pcall(fn)
         assert_true(ok and type(inst) == 'table', 'Suite 113: gm_commands.lua loads')
         return inst
@@ -20435,12 +20438,12 @@ do
 
     -- 5. Core wiring
     do
-        local t = readFile('TAC/lua/triune/init.lua')
+        local t = readFile('MCAC/lua/mcac/init.lua')
         assert_true(t:find("'gm_commands.lua',", 1, true) ~= nil, 'Suite 113: discover() known-plugin probe lists gm_commands.lua')
         assert_true(t:find('if c.show_gm_commands == nil then c.show_gm_commands = false end', 1, true) ~= nil, 'Suite 113: sanitize seeds show_gm_commands')
         assert_true(t:find('show_gm_commands         = false,', 1, true) ~= nil, 'Suite 113: default loadout has show_gm_commands')
         assert_true(t:find("{ cmd = '/ac gm [<#command args>]'", 1, true) ~= nil, 'Suite 113: Help tab lists /ac gm')
-        local psrc = readFile('TAC/lua/tac/gm_commands.lua')
+        local psrc = readFile('MCAC/lua/mcac/gm_commands.lua')
         assert_true(psrc:find('mq.delay(', 1, true) == nil, 'Suite 113: the plugin never blocks the core')
         assert_true(psrc:find("mq.cmdf('/say %s', line)", 1, true) ~= nil, 'Suite 113: # lines go out through /say')
         assert_true(select(2, psrc:gsub("mq%.cmdf?%(", '')) == 1, 'Suite 113: sendNow() is the only way a line is typed')

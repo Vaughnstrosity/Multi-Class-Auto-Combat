@@ -1,6 +1,6 @@
 ---@diagnostic disable: lowercase-global, undefined-global
--- .luacheckrc — Luacheck configuration for TriuneAutocombat
--- Runs on CI via `luacheck TAC/` to catch typos, unused vars, shadowed
+-- .luacheckrc — Luacheck configuration for MCAC
+-- Runs on CI via `luacheck MCAC/` to catch typos, unused vars, shadowed
 -- locals, and references to undefined globals.
 
 std = "luajit"
@@ -53,7 +53,7 @@ read_globals = {
 }
 
 -- Per-file overrides
-files["TAC/config/triune_data.lua"] = {
+files["MCAC/config/mcac_data.lua"] = {
     -- Generated file; suppress all warnings
     ignore = { "" },
 }
@@ -66,7 +66,7 @@ ignore = {
     "621",           -- inconsistent indentation
     "212",           -- unused argument (event handlers, ImGui callbacks)
     "212/_%w*",      -- unused loop variable starting with _
-    "431",           -- shadowing upvalue (very common with pcall patterns; ~10 hits in TAC/)
+    "431",           -- shadowing upvalue (very common with pcall patterns; ~10 hits in MCAC/)
     "432",           -- shadowing upvalue argument
     "542",           -- empty if branch (used deliberately with a comment to short-circuit an elseif chain)
 }

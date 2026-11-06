@@ -1,16 +1,16 @@
-# TriuneAutocombat — Project Rules for Antigravity
+# MCAC — Project Rules for Antigravity
 
 ## Project Overview
 
-**TriuneAutocombat** is a MacroQuest ImGui Lua autocombat engine for EverQuest
+**MCAC** is a MacroQuest ImGui Lua autocombat engine for EverQuest
 progression servers. It automates targeting, spell casting, pet management, and
 navigation for a "trio" of three EverQuest classes played on one character. It is
 written entirely in Lua 5.1 / LuaJIT and runs inside MacroQuest via
-`/lua run triune`.
+`/lua run mcac`.
 
-The code is one **core** script, `TAC/lua/triune/init.lua` (UI, loadout, combat loop,
+The code is one **core** script, `MCAC/lua/mcac/init.lua` (UI, loadout, combat loop,
 persistence, and the plugin manager), plus **in-process plugins** in
-`TAC/lua/tac/*.lua`. The companion tools that used to be standalone scripts
+`MCAC/lua/mcac/*.lua`. The companion tools that used to be standalone scripts
 (map, DPS, inventory, cursor, buffbot, spellbook, ...) are all plugins now: they
 run inside the core's Lua state, on its main coroutine, and draw inside its
 ImGui callback.
@@ -18,13 +18,13 @@ ImGui callback.
 ## Plugin Architecture (replaces the old Standalone File Rule)
 
 - **Discovery and loading.** The plugin manager (`initPluginManager` /
-  `runtime.pluginManager` in `triune/init.lua`) lists `lua/tac/` (lfs, else a
+  `runtime.pluginManager` in `mcac/init.lua`) lists `lua/mcac/` (lfs, else a
   directory listing, else a probe of the known shipped plugin names), runs each
   file's chunk and registers the returned table. A file that returns nothing,
   a non-table, or a table without an `id` / any hook is listed as a stray
   script instead of a plugin. Library modules that live in the folder but are
   `require()`d by the core (`PLUGIN_DIR_LIBRARIES`, currently
-  `tac/triune_log.lua`) are skipped by the scanner.
+  `mcac/mcac_log.lua`) are skipped by the scanner.
 - **A plugin file returns one table**: `id`, `name`, `version`, `author`,
   `description`, `defaultEnabled`, `tickInterval` (seconds, default 0.1),
   `runOutOfCombatOnly`, `hasThread` (run `onTick` in its own fiber), optional
@@ -68,7 +68,7 @@ ImGui callback.
 ## Theme Rule
 
 There is exactly **one** theme: `UI.pushTheme()` / `UI.popTheme()` in
-`triune.lua`, handed to plugins as `core.pushTheme()` / `core.popTheme()`. Every
+`mcac.lua`, handed to plugins as `core.pushTheme()` / `core.popTheme()`. Every
 plugin window wraps its `ImGui.Begin` ... `ImGui.End` in
 `core.pushTheme()` / `core.popTheme()` and uses the colours from `core.colors`.
 Plugins must **not** define their own `pushTheme` / `popTheme` or push the theme
@@ -79,35 +79,35 @@ enforces this. To change the look, edit `UI.pushTheme` only.
 
 | File | Role |
 |---|---|
-| `TAC/lua/triune/init.lua` | Core: main window UI and theme, loadout, combat loop, persistence, plugin manager. Entry point (`/lua run triune`). |
-| `TAC/lua/tac/triune_log.lua` | Library module (`require('tac.triune_log')`), not a plugin: leveled logger, print() tee, diagnostic dump. |
-| `TAC/lua/tac/auto_aa.lua` | Auto AA: priority purchasing through the AA window, Fireworks cap spender, Auto AA window. |
-| `TAC/lua/tac/auto_accept.lua` | Auto-accept group / trade / expedition invites from whitelisted, group or guild players. |
-| `TAC/lua/tac/boxnet.lua` | Box Network (MQ Actors): peer roster, remote `/ac` commands, message API for other plugins. |
-| `TAC/lua/tac/buffbot.lua` | Tell-driven buffbot station. |
-| `TAC/lua/tac/buttons.lua` | Button Master-style hot button bars. |
-| `TAC/lua/tac/chat.lua` | Chat window replacement (filtered tabs, multiple windows). |
-| `TAC/lua/tac/cursor.lua` | Cursor item manager. |
-| `TAC/lua/tac/dps.lua` | Combat-log DPS parser with its own version number. |
-| `TAC/lua/tac/floating_damage.lua` | Floating crit damage numbers (overlay, no window). |
-| `TAC/lua/tac/gamedb.lua` | Offline item / NPC / spell database browser (data in `TAC/resources/gamedb/`). |
-| `TAC/lua/tac/gm_commands.lua` | EQEmu GM (#) command reference and runner (off by default). |
-| `TAC/lua/tac/hud_*.lua` | Popout HUD windows: cooldowns, effects, group, spell gems, unit frames, XTarget. |
-| `TAC/lua/tac/inventory.lua` | Inventory / bank manager with offline bank cache and box inventories. |
-| `TAC/lua/tac/map.lua` | 2D map, Norrath zone atlas, NPC tracker, camp / waypoint overlays. |
-| `TAC/lua/tac/nmsloot.lua` | Personal loot (#nms) console over the Box Network. |
-| `TAC/lua/tac/parcels.lua` | Parcel notifier and Collect All. |
-| `TAC/lua/tac/spellbook.lua` | Per-class spell browser and mem-to-gem queue. |
-| `TAC/lua/tac/update_check.lua` | GitHub release check (non-blocking, no external process). |
-| `TAC/config/triune_data.lua` | Era-correct spell/disc/AA database (generated, not hand-edited). |
-| `TAC/resources/gamedb/` | Game database files, built by `tools/build_gamedb.py` from the server SQL dump. |
+| `MCAC/lua/mcac/init.lua` | Core: main window UI and theme, loadout, combat loop, persistence, plugin manager. Entry point (`/lua run mcac`). |
+| `MCAC/lua/mcac/mcac_log.lua` | Library module (`require('mcac.mcac_log')`), not a plugin: leveled logger, print() tee, diagnostic dump. |
+| `MCAC/lua/mcac/auto_aa.lua` | Auto AA: priority purchasing through the AA window, Fireworks cap spender, Auto AA window. |
+| `MCAC/lua/mcac/auto_accept.lua` | Auto-accept group / trade / expedition invites from whitelisted, group or guild players. |
+| `MCAC/lua/mcac/boxnet.lua` | Box Network (MQ Actors): peer roster, remote `/ac` commands, message API for other plugins. |
+| `MCAC/lua/mcac/buffbot.lua` | Tell-driven buffbot station. |
+| `MCAC/lua/mcac/buttons.lua` | Button Master-style hot button bars. |
+| `MCAC/lua/mcac/chat.lua` | Chat window replacement (filtered tabs, multiple windows). |
+| `MCAC/lua/mcac/cursor.lua` | Cursor item manager. |
+| `MCAC/lua/mcac/dps.lua` | Combat-log DPS parser with its own version number. |
+| `MCAC/lua/mcac/floating_damage.lua` | Floating crit damage numbers (overlay, no window). |
+| `MCAC/lua/mcac/gamedb.lua` | Offline item / NPC / spell database browser (data in `MCAC/resources/gamedb/`). |
+| `MCAC/lua/mcac/gm_commands.lua` | EQEmu GM (#) command reference and runner (off by default). |
+| `MCAC/lua/mcac/hud_*.lua` | Popout HUD windows: cooldowns, effects, group, spell gems, unit frames, XTarget. |
+| `MCAC/lua/mcac/inventory.lua` | Inventory / bank manager with offline bank cache and box inventories. |
+| `MCAC/lua/mcac/map.lua` | 2D map, Norrath zone atlas, NPC tracker, camp / waypoint overlays. |
+| `MCAC/lua/mcac/nmsloot.lua` | Personal loot (#nms) console over the Box Network. |
+| `MCAC/lua/mcac/parcels.lua` | Parcel notifier and Collect All. |
+| `MCAC/lua/mcac/spellbook.lua` | Per-class spell browser and mem-to-gem queue. |
+| `MCAC/lua/mcac/update_check.lua` | GitHub release check (non-blocking, no external process). |
+| `MCAC/config/mcac_data.lua` | Era-correct spell/disc/AA database (generated, not hand-edited). |
+| `MCAC/resources/gamedb/` | Game database files, built by `tools/build_gamedb.py` from the server SQL dump. |
 | `tests/test_pure_logic.lua` | Unit tests (`luajit tests/test_pure_logic.lua`); test the real functions via `loadFunc` / plugin loading, not local copies. |
 | `tests/check_theme_consistency.sh`, `tests/ci_local.sh` | Theme check; local run of every CI check. |
 | `CHANGELOG.md` | Full history of changes, newest date first. |
 | `RELEASES.md` | Short per-release summary (`## <version>`), used for the GitHub release body. |
 | `README.md` | User-facing documentation including commands, features, file structure. |
 
-> **Note:** `triune_loadout_<server>_<char>.lua` and the plugins' settings are written to the MQ config directory at runtime — they are NOT in this repo.
+> **Note:** `mcac_loadout_<server>_<char>.lua` and the plugins' settings are written to the MQ config directory at runtime — they are NOT in this repo.
 
 
 ---
@@ -135,7 +135,7 @@ performance improvements, new slash commands, new config fields, or any behavior
 
 Rules:
 - Dates are always `YYYY-MM-DD` format (current local date).
-- Newest date goes at the **top** of the file, below the `# Triune AutoCombat Change Log` heading.
+- Newest date goes at the **top** of the file, below the `# MCAC Change Log` heading.
 - Each bullet describes **what changed and why**, not just what the code does.
 - Sub-bullets explain implementation choices when the top-level bullet alone is unclear.
 - The `---` horizontal rule separates date sections.
@@ -155,7 +155,7 @@ Rules:
 
 ### Version Number Locations
 
-The canonical version is defined in `TAC/lua/triune/init.lua`:
+The canonical version is defined in `MCAC/lua/mcac/init.lua`:
 ```lua
 local VERSION           = '3.4'
 ```
@@ -165,7 +165,7 @@ The README must always reflect this value:
 Current version: **3.4**
 ```
 
-When you bump the version, update `TAC/lua/triune/init.lua` and the `README.md`.
+When you bump the version, update `MCAC/lua/mcac/init.lua` and the `README.md`.
 CI (`.github/workflows/ci.yml`) fails if these drift apart, and the release
 workflow refuses a tag that does not match `VERSION` or has no `## <version>`
 entry in `RELEASES.md`.
@@ -213,7 +213,7 @@ local val = mq.TLO.Me.Gem(slot).Name()
 ### ImGui Thread Safety & Window Rules
 - **Never call `mq.delay()` from an ImGui render callback** — it is a non-yieldable thread and will crash with "Cannot delay from non-yieldable thread".
 - Queue actions via a `pending*` flag (e.g., `reDetectRequested`, `pendingAction`) and execute them in the main coroutine loop.
-- Pattern used in `tac/cursor.lua` (pendingAction) and `triune.lua` (reDetectRequested). Plugins can also hand the work to `core.defer(label, fn)`.
+- Pattern used in `mcac/cursor.lua` (pendingAction) and `mcac.lua` (reDetectRequested). Plugins can also hand the work to `core.defer(label, fn)`.
 - **Unique Element & Table IDs across Windows**: Every ImGui table, child window, tab bar, or button rendered in the same frame MUST have unique string IDs (e.g. `InspectTable` vs `MainTable`). Duplicate IDs across separate windows cause ImGui ID collisions, freezing inputs and routing clicks to the wrong window.
 - **No Nested `ImGui.Begin()` Window Callbacks**: Never call `ImGui.Begin()` for a secondary window inside the render callback of a primary window (between its `ImGui.Begin()` and `ImGui.End()`). Nested `ImGui.Begin()` calls corrupt ImGui's focus stack, causing buttons, tab bars, and titlebar `X` close buttons on the secondary window to freeze. Draw each top-level window as its own `Begin` ... `End` pair, one after the other (in the core: its own `mq.imgui.init` callback; in a plugin: sequentially inside `onDrawUI` — plugins may not call `mq.imgui.init`).
 - **Secondary Window Focus & Inspectors**: Secondary top-level windows in MQ Lua do not automatically steal mouse focus from the main window, causing clicks on secondary window controls to freeze or fall through. To present detailed inspection UI, use **In-Tab Detail Views** (with a `< Back to List` button) or **ImGui Modal Popups** (`ImGui.BeginPopupModal` / `ImGui.OpenPopup`), which force 100% input focus and guarantee responsive clicks.
@@ -255,8 +255,8 @@ When adding new state, always add it to the appropriate table — never add a ba
 - Top-level `local function name(...)` statements count as local variables in the main chunk.
 - Top-level `local var = ...` statements count as local variables in the main chunk.
 - Block locals at the file level (e.g. inside file-level `if ... end` blocks) count against the main chunk's active register slots.
-- **NEVER define bare top-level functions or state when extending `triune.lua`.** Attach functions and state to `runtime` (e.g., `function runtime.myHelper(...)`), `UI` (e.g., `function UI.myWindow(...)`), or other structured tables.
-- **ALWAYS verify local variable counts with `luac -l -p TAC/lua/triune/init.lua`**: Verify that the main chunk slots count is well below 200 (target `<= 185`). CI automatically enforces `luac -p` compilation and unit tests verify this threshold.
+- **NEVER define bare top-level functions or state when extending `mcac.lua`.** Attach functions and state to `runtime` (e.g., `function runtime.myHelper(...)`), `UI` (e.g., `function UI.myWindow(...)`), or other structured tables.
+- **ALWAYS verify local variable counts with `luac -l -p MCAC/lua/mcac/init.lua`**: Verify that the main chunk slots count is well below 200 (target `<= 185`). CI automatically enforces `luac -p` compilation and unit tests verify this threshold.
 
 
 ---
@@ -265,7 +265,7 @@ When adding new state, always add it to the appropriate table — never add a ba
 
 - Section headers use `-- ====` / `-- ----` banner comments as present throughout the files.
 - Color constants use descriptive names: `GOOD`, `WARN`, `ERR`, `ARC`, `GOLD`, `MUTED`.
-- The unified dark theme lives only in `UI.pushTheme` / `UI.popTheme` in `triune.lua`;
+- The unified dark theme lives only in `UI.pushTheme` / `UI.popTheme` in `mcac.lua`;
   plugins call `core.pushTheme()` / `core.popTheme()` and never carry a copy (see Theme Rule).
 - Class abbreviations always use the mixed-case data-file format: `War`, `Clr`, `Pal`, `Rng`, `SK`, `Dru`, `Mnk`, `Brd`, `Rog`, `Shm`, `Nec`, `Wiz`, `Mag`, `Enc`, `Bst`, `Ber`.
 

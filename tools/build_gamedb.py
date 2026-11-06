@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-tools/build_gamedb.py - build the offline Triune game database (items, NPCs,
+tools/build_gamedb.py - build the offline MCAC game database (items, NPCs,
 spells) that the `gamedb` plugin reads in game.
 
 Inputs
   --sql     a mysqldump of the Project Triune (EQEmu) server database
   --quests  the server's quest script tree (Perl / Lua, one folder per zone)
-  --out     the output folder (default: TAC/resources/gamedb)
+  --out     the output folder (default: MCAC/resources/gamedb)
 
 Outputs (all plain text, no runtime dependencies in Lua)
   <kind>.idx        one line per searchable entry; loaded in game in chunks
@@ -604,7 +604,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--sql', default=None, help='mysqldump .sql of the server database')
     ap.add_argument('--quests', default=None, help='quest script root (one folder per zone)')
-    ap.add_argument('--out', default=os.path.join(os.path.dirname(__file__), '..', 'TAC', 'resources', 'gamedb'))
+    ap.add_argument('--out', default=os.path.join(os.path.dirname(__file__), '..', 'MCAC', 'resources', 'gamedb'))
     ap.add_argument('--chunk-mb', type=int, default=40, help='max size of one .dat chunk')
     ap.add_argument('--max-list', type=int, default=60, help='cap for per-record cross-reference lists')
     ap.add_argument('--reindex-items', action='store_true', help='only rewrite items.idx (v2, with the filter field) from the .dat files in --out')

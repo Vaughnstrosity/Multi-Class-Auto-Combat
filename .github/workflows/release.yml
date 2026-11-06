@@ -45,13 +45,13 @@ jobs:
             exit 1
           fi
           VER="${TAG#v}"; VER="${VER#V}"
-          MAIN=$(grep -oP "^local VERSION\s+= '\K[^']+" TAC/lua/triune/init.lua || true)
+          MAIN=$(grep -oP "^local VERSION\s+= '\K[^']+" MCAC/lua/mcac/init.lua || true)
           if [ -z "$MAIN" ]; then
-            echo "::error::Could not read local VERSION from TAC/lua/triune/init.lua"
+            echo "::error::Could not read local VERSION from MCAC/lua/mcac/init.lua"
             exit 1
           fi
           if [ "$VER" != "$MAIN" ]; then
-            echo "::error::Tag $TAG does not match local VERSION = '$MAIN' in TAC/lua/triune/init.lua"
+            echo "::error::Tag $TAG does not match local VERSION = '$MAIN' in MCAC/lua/mcac/init.lua"
             exit 1
           fi
           echo "Tag $TAG matches VERSION $MAIN"
@@ -99,18 +99,18 @@ jobs:
 
           ### 🆕 New installation
           1. Download the latest **RoF2** MacroQuest from https://github.com/macroquest/macroquest/releases and extract it somewhere like `C:\\MacroQuest`.
-          2. Download **`TriuneAutocombat-full.zip`** from the Assets below. It has everything: the Lua scripts, config, the offline game database (`resources/gamedb/`) and the MQ2Nav zone navmeshes (`resources/MQ2Nav/`).
+          2. Download **`MCAC-full.zip`** from the Assets below. It has everything: the Lua scripts, config, the offline game database (`resources/gamedb/`) and the MQ2Nav zone navmeshes (`resources/MQ2Nav/`).
           3. Extract the zip **into the root of your MacroQuest folder**. It merges `lua/`, `config/` and `resources/` into place.
           4. Windows users: add your MacroQuest folder as an antivirus exception before running it.
-          5. Start `MacroQuest.exe`, then log into Project Triune. Triune opens by itself when you log in - if you close it, type `/ac` or `/lua run triune`.
+          5. Start `MacroQuest.exe`, then log into Project Triune. MCAC opens by itself when you log in - if you close it, type `/ac` or `/lua run mcac`.
 
           ### 🔄 Updating an existing installation
-          1. Download **`TriuneAutocombat-Update.zip`** from the Assets below. It has everything except the MQ2Nav navmeshes (they rarely change) - grab the full zip if you also need those.
+          1. Download **`MCAC-Update.zip`** from the Assets below. It has everything except the MQ2Nav navmeshes (they rarely change) - grab the full zip if you also need those.
           2. Extract it **into the root of your MacroQuest folder** and overwrite files if asked.
-          3. If Triune was running, type `/ac restart` (or relog) to load the new version.
+          3. If MCAC was running, type `/ac restart` (or relog) to load the new version.
 
-          *Your own settings and saved loadouts (`config/triune_loadout_<server>_<char>.lua`, `config/triune_chat_<Name>.lua`) are never overwritten.*
-          """.format(repo=os.environ.get('GITHUB_REPOSITORY', 'gennro/TriuneAutocombat'), tag=tag or 'main')
+          *Your own settings and saved loadouts (`config/mcac_loadout_<server>_<char>.lua`, `config/mcac_chat_<Name>.lua`) are never overwritten.*
+          """.format(repo=os.environ.get('GITHUB_REPOSITORY', 'Vaughnstrosity/Multi-Class-Auto-Combat'), tag=tag or 'main')
           footer = '\n'.join(line[10:] if line.startswith(' ' * 10) else line for line in footer.split('\n'))
 
           with open('RELEASE_NOTES.md', 'w', encoding='utf-8') as out:
@@ -122,33 +122,33 @@ jobs:
 
       - name: Package Release Archives
         run: |
-          # Both archives are built from the TAC/ tree so new modules, config
+          # Both archives are built from the MCAC/ tree so new modules, config
           # and resource files are picked up automatically. The update zip
           # ships everything except the MQ2Nav navmeshes (~1 GB, rarely
           # change); the full zip ships the whole tree.
           git archive --format=zip --add-file=README.md --add-file=CHANGELOG.md \
-            -o TriuneAutocombat-Update.zip HEAD:TAC . ':!resources/MQ2Nav'
+            -o MCAC-Update.zip HEAD:MCAC . ':!resources/MQ2Nav'
           git archive --format=zip --add-file=README.md --add-file=CHANGELOG.md \
-            -o TriuneAutocombat-full.zip HEAD:TAC .
+            -o MCAC-full.zip HEAD:MCAC .
 
       - name: Verify Archive Contents
         run: |
           set -e
-          for z in TriuneAutocombat-Update.zip TriuneAutocombat-full.zip; do
+          for z in MCAC-Update.zip MCAC-full.zip; do
             echo "== $z ($(du -h "$z" | cut -f1))"
             unzip -l "$z" | grep -v '/MQ2Nav/'
-            unzip -l "$z" | grep -q 'lua/triune/init.lua' || { echo "missing lua/triune/init.lua in $z"; exit 1; }
+            unzip -l "$z" | grep -q 'lua/mcac/init.lua' || { echo "missing lua/mcac/init.lua in $z"; exit 1; }
             unzip -l "$z" | grep -q 'gamedb/manifest.txt' || { echo "missing resources/gamedb in $z"; exit 1; }
           done
-          unzip -l TriuneAutocombat-Update.zip | grep -q '\.navmesh' && { echo "update zip must not contain navmeshes"; exit 1; }
-          unzip -l TriuneAutocombat-full.zip   | grep -q '\.navmesh' || { echo "full zip is missing navmeshes"; exit 1; }
+          unzip -l MCAC-Update.zip | grep -q '\.navmesh' && { echo "update zip must not contain navmeshes"; exit 1; }
+          unzip -l MCAC-full.zip   | grep -q '\.navmesh' || { echo "full zip is missing navmeshes"; exit 1; }
           echo "Archives verified"
       - name: Create or Update Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            TriuneAutocombat-Update.zip
-            TriuneAutocombat-full.zip
+            MCAC-Update.zip
+            MCAC-full.zip
           tag_name: ${{ inputs.tag_name || github.ref_name }}
           body_path: RELEASE_NOTES.md
         env:
