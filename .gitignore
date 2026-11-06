@@ -6,6 +6,7 @@ __pycache__/
 *.pyc
 
 # Local-only (not part of the repo): unit tests, build tools, bundled resources
+/.luacheckrc
 /tests/
 /tools/
 /MCAC/resources/
