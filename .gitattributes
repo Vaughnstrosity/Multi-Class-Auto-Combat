@@ -8,3 +8,6 @@
 .agents export-ignore
 .luarc.json export-ignore
 .luacheckrc export-ignore
+README.md export-ignore
+CHANGELOG.md export-ignore
+RELEASES.md export-ignore
