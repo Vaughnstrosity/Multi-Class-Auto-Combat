@@ -7,6 +7,4 @@
 .github export-ignore
 .agents export-ignore
 .luarc.json export-ignore
-
-
-# The game database is read by byte offset: never convert its line endings.
+.luacheckrc export-ignore
