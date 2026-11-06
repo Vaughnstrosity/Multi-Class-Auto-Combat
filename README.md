@@ -46,7 +46,7 @@ Your setup is saved automatically and reloads next time.
 
 Set the Main Assist with `/ac ma <name>` or from the Control tab.
 
-**Combat style** (Settings tab, or `/ac style melee|ranged|spell`) decides how you fight: close to melee, shoot a bow from a distance, or stand back and only cast.
+**Combat style** (Settings tab, or `/ac style melee|ranged|spell`) decides how you fight: close to melee, shoot a bow from a distance, or stand back and only cast. On servers that allow casting in motion, tick **Cast While Moving** (same section) so MCAC stops halting movement before casts.
 
 **Pulling** options live on the Control tab: pull with melee, a spell, your pet or a bow; an **Include list** (only pull these) and an **Ignore list** (never pull these); faction filters so you never pull a guard; and **waypoint routes** for patrolling a path (`/ac wp add` while walking). Fine-tuning distances and timers (pet search radii, summon grace, the unreachable-mob blacklist, pull distances, idle roaming, group-rez attempts) are sliders under **Settings -> General Settings -> Advanced Tuning**.
 
@@ -132,7 +132,8 @@ All paths are inside your MacroQuest folder.
 | File | What it holds |
 |---|---|
 | `config/mcac_loadout_<server>_<char>.lua` | Each character's settings and loadouts. Never overwritten by updates. |
-| `config/mcac_chat_<Name>.lua` | Chat Windows layout and colours, per character. |
+| `config/mcac_chat_<server>_<Name>.lua` | Chat Windows layout and colours, per server and character. |
+| `config/mcac_dps_<server>_<Name>.lua` | DPS Parser settings, per server and character. |
 | `Logs/mcac_*.log` | Diagnostic logs (when Log To File is on). |
 | `lua/mcac/init.lua` | The bot itself (run with `/lua run mcac`). If you are updating from the Triune AutoCombat names, delete the old `lua/triune.lua` (or `lua/triune/`) and `lua/tac/` folder. |
 | `lua/mcac/*.lua` | The plugins listed above (everything except `init.lua`). Drop your own `.lua` plugin here and it loads. |
@@ -157,6 +158,6 @@ A plugin is one Lua file in `lua/mcac/` that returns a table with an `id`, a `na
 
 ## Version
 
-Current version: **3.51**
+Current version: **3.6.0**
 
 See [CHANGELOG.md](CHANGELOG.md) for what changed in each release.

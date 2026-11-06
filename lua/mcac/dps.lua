@@ -354,7 +354,13 @@ local function getConfigFilePath()
     local myName = 'Default'
     local ok, name = pcall(function() return mq.TLO.Me.CleanName() end)
     if ok and name and name ~= '' then myName = name end
-    cachedConfigPath = string.format('%s/mcac_dps_%s.lua', mq.configDir or 'config', myName)
+    local dir = mq.configDir or 'config'
+    local tag = (core and core.serverTag and core.serverTag()) or 'unknown'
+    cachedConfigPath = string.format('%s/mcac_dps_%s_%s.lua', dir, tag, myName)
+    -- older versions kept one file per character name (no server)
+    if core and core.migrateFile then
+        core.migrateFile(string.format('%s/mcac_dps_%s.lua', dir, myName), cachedConfigPath)
+    end
     return cachedConfigPath
 end
 

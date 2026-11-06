@@ -4,6 +4,15 @@ Short, human-readable notes for each release. The GitHub release page is built
 from the entry that matches the tag (`v3.0` -> `## 3.0`). The full, detailed
 history of every change stays in [CHANGELOG.md](CHANGELOG.md).
 
+## 3.6.0
+
+New features: a **Cast While Moving** setting for servers that allow casting in motion
+(Settings -> Combat Style & Positioning), and settings kept **per server as well as per
+character**, so the same character name on two servers stays separate. MCAC now also notices
+when you switch to the same name on another server while it is running. Chat layout/history/logs
+and DPS settings gain the server in their file names; existing files are copied on first start.
+Delete nothing: old files are left in place.
+
 ## 3.51
 
 Renamed to **MCAC (Multi Class Auto Combat)**. The script is now `lua/mcac/init.lua`

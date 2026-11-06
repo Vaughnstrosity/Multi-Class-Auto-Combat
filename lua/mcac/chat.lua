@@ -851,6 +851,15 @@ end
 -- ----------------------------------------------------------------------------
 -- Config persistence
 -- ----------------------------------------------------------------------------
+-- Server-tagged file names (the core owns the lookup; 'unknown' before it is wired)
+function rt.serverTag()
+    return (core and core.serverTag and core.serverTag()) or 'unknown'
+end
+
+function rt.migrateFile(old, new)
+    if core and core.migrateFile then core.migrateFile(old, new) end
+end
+
 local function configPath()
     if rt.configPath then return rt.configPath end
     local name = 'Default'
@@ -858,7 +867,10 @@ local function configPath()
         local n = mq.TLO.Me.CleanName()
         if n and n ~= '' then name = tostring(n) end
     end)
-    rt.configPath = string.format('%s/mcac_chat_%s.lua', (mq and mq.configDir) or 'config', name)
+    local dir = (mq and mq.configDir) or 'config'
+    rt.configPath = string.format('%s/mcac_chat_%s_%s.lua', dir, rt.serverTag(), name)
+    -- older versions kept one file per character name (no server)
+    rt.migrateFile(string.format('%s/mcac_chat_%s.lua', dir, name), rt.configPath)
     return rt.configPath
 end
 
@@ -1679,7 +1691,7 @@ local function tabLogWrite(win, tab, st, entry)
         end
         local name = 'Default'
         pcall(function() local n = mq.TLO.Me.CleanName(); if n and n ~= '' then name = tostring(n) end end)
-        local path = string.format('%s/mcac_chat_%s_%s_%s.txt', logsDirCached, safeFileName(name), safeFileName(tab.name), day)
+        local path = string.format('%s/mcac_chat_%s_%s_%s_%s.txt', logsDirCached, rt.serverTag(), safeFileName(name), safeFileName(tab.name), day)
         st.logFile = io.open(path, 'a')
         st.logDay = day
         if not st.logFile then
@@ -1961,7 +1973,11 @@ local registeredEvents = {}
 H.FIELDS = 7
 
 function H.path()
-    return string.format('%s/mcac_chat_history_%s.txt', ((mq and mq.configDir) or 'config'):gsub('[/\\]+$', ''), safeFileName(myName()))
+    local dir = ((mq and mq.configDir) or 'config'):gsub('[/\\]+$', '')
+    local path = string.format('%s/mcac_chat_history_%s_%s.txt', dir, rt.serverTag(), safeFileName(myName()))
+    -- older versions kept one history file per character name (no server)
+    rt.migrateFile(string.format('%s/mcac_chat_history_%s.txt', dir, safeFileName(myName())), path)
+    return path
 end
 
 -- Fields are tab-separated; a backslash and every control byte (the \x12 of

@@ -61,7 +61,7 @@ do
         end
     end)
 end
-local VERSION           = '3.51'
+local VERSION           = '3.6.0'
 local open              = true
 -- File-backed diagnostic logger. Hooked into print() right away so every
 -- chat line from here on (core and plugins) is captured in its ring buffer;
@@ -460,6 +460,7 @@ local function defaultCtrl()
         buff_refresh_sec         = 45,
         pet_assist_at            = 100,
         pet_hold_enabled         = true,
+        cast_while_moving        = false,
         pet_names                = {},   -- cls -> pet name learned from that class's last summon (pet names are unique per player on this server)
         pet_names_manual         = {},   -- cls -> pet name the player typed in (Settings -> Pet Names); authoritative: the class's pet is looked up by this name
         show_crit_floaters       = true,
@@ -2780,6 +2781,7 @@ local function stopMoving()
 end
 
 function runtime.stopMovementForCast(cls, spell)
+    if ctrl.cast_while_moving == true then return end
     -- Bards can sing songs while running in EverQuest
     if cls == 'Brd' then return end
     local isBrd = false
@@ -5962,12 +5964,13 @@ end
 -- Per-character loadout file path (multibox-safe). Each client writes ONLY its
 -- own mcac_loadout_<server>_<char>.lua, so different characters never share
 -- (and never overwrite each other's) settings, ignore/pull lists, or zone data.
+-- The server this client is on right now ('' while unknown).
+function runtime.currentServer()
+    return require('mcac.mcac_id').server()
+end
+
 function runtime.loadoutFilePath()
-    local serverName = ''
-    pcall(function() serverName = mq.TLO.EverQuest.ServerName() or '' end)
-    if not serverName or serverName == '' then
-        pcall(function() serverName = mq.TLO.Zone.Server() or '' end)
-    end
+    local serverName = runtime.currentServer()
     local tag = (tostring(serverName or '') .. '_' .. tostring(myName or 'unknown')):gsub('[^%w%_-]', '_')
     return mq.configDir .. '/mcac_loadout_' .. tag .. '.lua'
 end
@@ -5981,6 +5984,11 @@ function runtime.loadAll()
     local t = nil
     if myName then
         local path = runtime.loadoutFilePath()
+        -- Remember which server/file this loadout came from: a same-name
+        -- character on another server is detected by the server changing, and
+        -- its outgoing settings must be flushed to THIS file, not the new one.
+        runtime.activeServer = runtime.currentServer()
+        runtime.activePath = path
         -- A save whose final rename failed leaves the only good copy in .tmp.
         for _, p in ipairs({ path, path .. '.tmp' }) do
             local fn = loadfile(p)
@@ -6061,7 +6069,7 @@ runtime.saveLoadout = function(silent, force)
     ALLDATA.__zoneWaypointPresets = ctrl.zone_waypoint_presets
     -- Write to a temp file and rename over the real one so a serialize error
     -- or a crash mid-write can never leave a truncated loadout behind.
-    local path = runtime.loadoutFilePath()
+    local path = runtime.activePath or runtime.loadoutFilePath()
     local tmpPath = path .. '.tmp'
     local f, oerr = io.open(tmpPath, 'w')
     if not f then
@@ -7445,6 +7453,11 @@ function runtime.initPluginManager()
             -- go out while Debug Mode is on; all levels land in the log file
             -- when Log To File is on. See mcac/mcac_log.lua.
             log                   = tlog,
+            -- Per-server files: core.serverTag() is the filename-safe server name
+            -- ('unknown' while not known); core.migrateFile(old, new) copies a
+            -- pre-server-tag file to its server-tagged name when that is missing.
+            serverTag             = function() return require('mcac.mcac_id').serverTag() end,
+            migrateFile           = function(old, new) return require('mcac.mcac_id').migrateFile(old, new) end,
             DATA                  = DATA,
             saveLoadout           = runtime.saveLoadout,
             colors                = { GOLD = GOLD, ARC = ARC, MUTED = MUTED, GOOD = GOOD, WARN = WARN, ERR = ERR },
@@ -7606,6 +7619,7 @@ function runtime.initPluginManager()
     local PLUGIN_DIR_LIBRARIES = {
         ['init.lua'] = true,
         ['mcac_log.lua'] = true,
+        ['mcac_id.lua'] = true,
     }
 
     -- Executing a dropped-in file runs its main chunk on the core's main
@@ -15089,6 +15103,15 @@ function UI.drawSettingsTab()
         if ImGui.IsItemHovered() then
             ImGui.SetTooltip('Instantly clear all active spell lockouts, non-stacking buff backoffs, and mob immunities.')
         end
+
+        local cwmVal = ImGui.Checkbox('Cast While Moving##castWhileMoving', ctrl.cast_while_moving == true)
+        if cwmVal ~= (ctrl.cast_while_moving == true) then
+            ctrl.cast_while_moving = cwmVal
+            runtime.saveLoadout(true)
+        end
+        if ImGui.IsItemHovered() then
+            UI.setTooltip('For servers that allow casting spells while moving. When enabled, MCAC no longer checks whether you are moving before casting spells, AAs and clickies: it does not stop navigation, stick or movement keys first and never aborts a cast because you are in motion. Leave it off on servers where movement interrupts casting.')
+        end
     end
 
     if ImGui.CollapsingHeader('Group Resurrection', ImGuiTreeNodeFlags.None) then
@@ -19092,7 +19115,7 @@ function runtime.castGem(i, g, id)
         print(string.format('\ao[DEBUG cast]\ax Gem %d "%s" on target #%d (dist=%.1f, Me.Combat=%s)',
             i, g.spell, id, distToId(id), tostring(mq.TLO.Me.Combat())))
     end
-    if g.cls ~= 'Brd' then
+    if g.cls ~= 'Brd' and ctrl.cast_while_moving ~= true then
         runtime.stopMovementForCast(g.cls, g.spell)
         local stillMoving = false
         pcall(function() stillMoving = mq.TLO.Me.Moving() or false end)
@@ -19204,7 +19227,8 @@ function runtime.fireAA(name, a, id)
     if castMs > 0 then
         local isMoving = false
         pcall(function() isMoving = mq.TLO.Me.Moving() or false end)
-        if isCasting() or (runtime.isMoveActive and runtime.isMoveActive()) or isMoving then return false end
+        if isCasting() then return false end
+        if ctrl.cast_while_moving ~= true and ((runtime.isMoveActive and runtime.isMoveActive()) or isMoving) then return false end
     end
     local selfCast = (id == mq.TLO.Me.ID())
     local orig = mq.TLO.Target.ID() or 0
@@ -19225,7 +19249,7 @@ function runtime.fireAA(name, a, id)
         runtime.stopMovementForCast(a and a.cls, name)
         local stillMoving = false
         pcall(function() stillMoving = mq.TLO.Me.Moving() or false end)
-        if stillMoving then
+        if stillMoving and ctrl.cast_while_moving ~= true then
             runtime.abortPendingCast(orig, id, keepHostile)
             return false
         end
@@ -19714,7 +19738,8 @@ runtime.useClickie = function(c, id)
     if castMs > 0 then
         local isMoving = false
         pcall(function() isMoving = mq.TLO.Me.Moving() or false end)
-        if isCasting() or isMoveActive() or isMoving then return false end
+        if isCasting() then return false end
+        if ctrl.cast_while_moving ~= true and (isMoveActive() or isMoving) then return false end
     end
 
     local dur = 0
@@ -19756,7 +19781,7 @@ runtime.useClickie = function(c, id)
         runtime.stopMovementForCast(c.cls, effName)
         local stillMoving = false
         pcall(function() stillMoving = mq.TLO.Me.Moving() or false end)
-        if stillMoving then
+        if stillMoving and ctrl.cast_while_moving ~= true then
             runtime.abortPendingCast(orig, id, keepHostile)
             return false
         end
@@ -25157,7 +25182,7 @@ local function combatTick()
         pcall(function() isMoving = mq.TLO.Me.Moving() or false end)
         local isBrdMe = false
         pcall(function() isBrdMe = (mq.TLO.Me.Class.ShortName() == 'BRD') end)
-        canCastMove = isBrdMe or not isMoving
+        canCastMove = isBrdMe or not isMoving or ctrl.cast_while_moving == true
         eventsProcessed = true
     end
 
@@ -25274,7 +25299,7 @@ local function combatTick()
     -- above are unaffected (instant, no cast bar, usable on the move). Casts
     categoryRunners.clickies = function()
     prepareCastState()
-    if combatReady and not isCasting() and not isMoveActive() and canCastMove and loadout.clickies and #loadout.clickies > 0 then
+    if combatReady and not isCasting() and (not isMoveActive() or ctrl.cast_while_moving == true) and canCastMove and loadout.clickies and #loadout.clickies > 0 then
         if not isCasting() and runtime.restoreTargetId ~= nil then
             local rId = runtime.restoreTargetId
             runtime.restoreTargetId = nil
@@ -25320,7 +25345,7 @@ local function combatTick()
     local inRealCombat = isCombat() or anyXtarAlive(true) or countNPCXtarget() > 0 or mq.TLO.Me.Combat() or (mq.TLO.Me.CombatState and mq.TLO.Me.CombatState() == 'COMBAT') or runtime.hasDowntimeAggroThreat()
     local gemCasted = false
 
-    if combatReady and not spellCastedThisTick and not isCasting() and not isMoveActive() and canCastMove then
+    if combatReady and not spellCastedThisTick and not isCasting() and (not isMoveActive() or ctrl.cast_while_moving == true) and canCastMove then
         if not isCasting() and runtime.restoreTargetId ~= nil then
             local rId = runtime.restoreTargetId
             runtime.restoreTargetId = nil
@@ -26441,7 +26466,14 @@ local function runMainLoop()
         runtime.doeventsMs = (os.clock() - evT0) * 1000
         runtime.loopStep('character change', function()
         local nm = mq.TLO.Me.CleanName()
-        if nm and nm ~= '' and nm ~= myName then
+        -- Same character name on another server (log out of one server, into
+        -- the other, with MCAC still running) is a different character:
+        -- compare the server as well as the name. An unknown ('') server never
+        -- counts as a change (it flickers while zoning / at character select).
+        local srv = runtime.currentServer()
+        local serverSwitched = srv ~= '' and runtime.activeServer ~= nil
+            and runtime.activeServer ~= '' and srv ~= runtime.activeServer
+        if nm and nm ~= '' and (nm ~= myName or serverSwitched) then
             -- Flush the outgoing character's pending (debounced / not yet
             -- detected) changes to ITS file before myName moves on.
             if myName and (runtime.autoDirty or (runtime.lastSig and loadoutSig() ~= runtime.lastSig)) then

@@ -109,7 +109,7 @@ jobs:
           2. Extract it **into the root of your MacroQuest folder** and overwrite files if asked.
           3. If MCAC was running, type `/ac restart` (or relog) to load the new version.
 
-          *Your own settings and saved loadouts (`config/mcac_loadout_<server>_<char>.lua`, `config/mcac_chat_<Name>.lua`) are never overwritten.*
+          *Your own settings and saved loadouts (`config/mcac_loadout_<server>_<char>.lua`, `config/mcac_chat_<server>_<Name>.lua`) are never overwritten.*
           """.format(repo=os.environ.get('GITHUB_REPOSITORY', 'Vaughnstrosity/Multi-Class-Auto-Combat'), tag=tag or 'main')
           footer = '\n'.join(line[10:] if line.startswith(' ' * 10) else line for line in footer.split('\n'))
 
