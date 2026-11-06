@@ -1,6 +1,6 @@
 ---@diagnostic disable: undefined-global, undefined-field
 -- ============================================================================
--- MCAC/lua/mcac/spellbook.lua — MCAC Spellbook Browser Plugin
+-- lua/mcac/spellbook.lua — MCAC Spellbook Browser Plugin
 -- ============================================================================
 -- In-process replacement for the old standalone mcac_spellbook.lua script.
 -- Browses the era spell database per Gestalt class with live scribed status,

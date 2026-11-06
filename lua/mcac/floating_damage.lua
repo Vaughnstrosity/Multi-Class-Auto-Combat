@@ -1,6 +1,6 @@
 ---@diagnostic disable: undefined-global, undefined-field
 -- ============================================================================
--- MCAC/lua/mcac/floating_damage.lua — MCAC Floating Damage Text Plugin
+-- lua/mcac/floating_damage.lua — MCAC Floating Damage Text Plugin
 -- ============================================================================
 -- Renders flashy floating damage numbers above the player character when a
 -- critical hit / crippling blow / deadly strike / spell crit lands. Melee,

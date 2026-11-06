@@ -7340,7 +7340,7 @@ function runtime.initPluginManager()
             local l = tostring(mq.luaDir):gsub('[/\\]+$', '')
             table.insert(rawCandidates, l .. '/mcac')
             table.insert(rawCandidates, l .. '/MCAC')
-            table.insert(rawCandidates, l .. '/../MCAC/lua/mcac')
+            table.insert(rawCandidates, l .. '/../lua/mcac')
             table.insert(rawCandidates, l .. '/../lua/mcac')
         end
 
@@ -7350,12 +7350,12 @@ function runtime.initPluginManager()
             table.insert(rawCandidates, s)
             table.insert(rawCandidates, s .. '/MCAC')
             table.insert(rawCandidates, s .. '/../lua/mcac')
-            table.insert(rawCandidates, s .. '/../MCAC/lua/mcac')
+            table.insert(rawCandidates, s .. '/../lua/mcac')
         end
 
         table.insert(rawCandidates, 'lua/mcac')
         table.insert(rawCandidates, 'lua/MCAC')
-        table.insert(rawCandidates, 'MCAC/lua/mcac')
+        table.insert(rawCandidates, 'lua/mcac')
         table.insert(rawCandidates, './mcac')
         table.insert(rawCandidates, './MCAC')
         table.insert(rawCandidates, 'mcac')
@@ -26211,7 +26211,7 @@ runtime.autoloadRequiredPlugins()
 
 -- ============================================================================
 -- Critical Hit Floating Text Overlay
--- Migrated to autonomous plugin in MCAC/lua/mcac/floating_damage.lua (v2.15).
+-- Migrated to autonomous plugin in lua/mcac/floating_damage.lua (v2.15).
 -- ============================================================================
 
 -- Mob slain detection: immediately clear dead target and schedule fast combat tick to acquire next mob

@@ -1,6 +1,6 @@
 ---@diagnostic disable: undefined-global, undefined-field
 -- ============================================================================
--- MCAC/lua/mcac/auto_accept.lua — MCAC Auto-Accept Plugin
+-- lua/mcac/auto_accept.lua — MCAC Auto-Accept Plugin
 -- ============================================================================
 -- Automatically handles incoming group invites, trade requests, and expedition /
 -- dynamic-zone invites from authorized players. Authorization is decided by the

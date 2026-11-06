@@ -45,13 +45,13 @@ jobs:
             exit 1
           fi
           VER="${TAG#v}"; VER="${VER#V}"
-          MAIN=$(grep -oP "^local VERSION\s+= '\K[^']+" MCAC/lua/mcac/init.lua || true)
+          MAIN=$(grep -oP "^local VERSION\s+= '\K[^']+" lua/mcac/init.lua || true)
           if [ -z "$MAIN" ]; then
-            echo "::error::Could not read local VERSION from MCAC/lua/mcac/init.lua"
+            echo "::error::Could not read local VERSION from lua/mcac/init.lua"
             exit 1
           fi
           if [ "$VER" != "$MAIN" ]; then
-            echo "::error::Tag $TAG does not match local VERSION = '$MAIN' in MCAC/lua/mcac/init.lua"
+            echo "::error::Tag $TAG does not match local VERSION = '$MAIN' in lua/mcac/init.lua"
             exit 1
           fi
           echo "Tag $TAG matches VERSION $MAIN"
@@ -122,9 +122,9 @@ jobs:
 
       - name: Package Release Archive
         run: |
-          # Built from the MCAC/ tree so new modules and config files are picked up automatically.
+          # Built from the lua/ and config/ folders so new modules and config files are picked up automatically.
           git archive --format=zip --add-file=README.md --add-file=CHANGELOG.md \
-            -o MCAC.zip HEAD:MCAC .
+            -o MCAC.zip HEAD lua config
 
       - name: Verify Archive Contents
         run: |

@@ -1,6 +1,6 @@
 ---@diagnostic disable: undefined-global, undefined-field, need-check-nil
 -- ============================================================================
--- MCAC/lua/mcac/map.lua — MCAC Map, Norrath Atlas & NPC Tracker Plugin
+-- lua/mcac/map.lua — MCAC Map, Norrath Atlas & NPC Tracker Plugin
 -- ============================================================================
 -- In-process replacement for the old standalone mcac_map.lua script (v1.1).
 -- Live 2D EverQuest map replacement and zone tracker:

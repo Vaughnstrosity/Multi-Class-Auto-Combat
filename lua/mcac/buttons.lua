@@ -1,6 +1,6 @@
 ---@diagnostic disable: undefined-global, undefined-field, deprecated, need-check-nil
 -- ============================================================================
--- MCAC/lua/mcac/buttons.lua — MCAC Hot Buttons Plugin (Button Master-style)
+-- lua/mcac/buttons.lua — MCAC Hot Buttons Plugin (Button Master-style)
 -- ============================================================================
 -- Replacement for EverQuest's hot button bars, modelled on Derple's Button
 -- Master (https://github.com/DerpleDude/buttonmaster) but living inside

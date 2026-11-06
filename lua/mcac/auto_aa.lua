@@ -1,6 +1,6 @@
 ---@diagnostic disable: undefined-global, undefined-field
 -- ============================================================================
--- MCAC/lua/mcac/auto_aa.lua — MCAC Auto AA Plugin
+-- lua/mcac/auto_aa.lua — MCAC Auto AA Plugin
 -- ============================================================================
 -- Automatic Alternate Advancement spending: scans the character's AA window,
 -- ranks abilities by the user's priority list, purchases them through the

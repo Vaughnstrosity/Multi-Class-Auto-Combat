@@ -1,6 +1,6 @@
 ---@diagnostic disable: undefined-global, undefined-field, need-check-nil
 -- ============================================================================
--- MCAC/lua/mcac/nms_looter_handoff.lua - NMS looter handoff by zone
+-- lua/mcac/nms_looter_handoff.lua - NMS looter handoff by zone
 -- ============================================================================
 -- Enable this plugin on every box that should participate. When the current
 -- NMS looter is no longer in the active zone, the highest-priority live

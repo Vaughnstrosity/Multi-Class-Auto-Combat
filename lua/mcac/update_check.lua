@@ -1,6 +1,6 @@
 ---@diagnostic disable: undefined-global, undefined-field
 -- ============================================================================
--- MCAC/lua/mcac/update_check.lua — MCAC Update Checker Plugin
+-- lua/mcac/update_check.lua — MCAC Update Checker Plugin
 -- ============================================================================
 -- Asks GitHub for the latest published MCAC release and tells you when it is
 -- newer than the copy you are running. Check only: nothing is downloaded or

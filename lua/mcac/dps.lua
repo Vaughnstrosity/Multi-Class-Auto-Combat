@@ -1,6 +1,6 @@
 ---@diagnostic disable: undefined-global, undefined-field, need-check-nil
 -- ============================================================================
--- MCAC/lua/mcac/dps.lua — MCAC DPS Parser Plugin
+-- lua/mcac/dps.lua — MCAC DPS Parser Plugin
 -- ============================================================================
 -- In-process replacement for the old standalone mcac_dps.lua script (v4.3).
 -- Parses combat chat into per-fight player / multi-pet damage breakdowns

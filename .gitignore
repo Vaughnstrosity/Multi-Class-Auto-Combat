@@ -9,4 +9,4 @@ __pycache__/
 *.luacheckrc
 /tests/
 /tools/
-/MCAC/resources/
+/resources/

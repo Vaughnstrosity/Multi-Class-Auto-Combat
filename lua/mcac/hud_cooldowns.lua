@@ -1,6 +1,6 @@
 ---@diagnostic disable: undefined-global, undefined-field
 -- ============================================================================
--- MCAC/lua/mcac/hud_cooldowns.lua — MCAC Cooldown & Ability Monitor Plugin
+-- lua/mcac/hud_cooldowns.lua — MCAC Cooldown & Ability Monitor Plugin
 -- ============================================================================
 -- Tracks every loadout ability (AAs, disciplines, skills, clickies, spell gems)
 -- with live ready / active / cooling-down status, timers, and click-to-fire,

@@ -1,6 +1,6 @@
 ---@diagnostic disable: undefined-global, undefined-field, need-check-nil
 -- ============================================================================
--- MCAC/lua/mcac/gamedb.lua — MCAC Game Database Plugin (items / NPCs / spells)
+-- lua/mcac/gamedb.lua — MCAC Game Database Plugin (items / NPCs / spells)
 -- ============================================================================
 -- An offline, in-game copy of the Project Triune database: every item with
 -- its stats, effects and tiers (Base / Enchanted / Legendary), where it drops

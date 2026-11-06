@@ -1,6 +1,6 @@
 ---@diagnostic disable: undefined-global, undefined-field, need-check-nil
 -- ============================================================================
--- MCAC/lua/mcac/boxnet.lua — MCAC Box Network Plugin (MacroQuest Actors)
+-- lua/mcac/boxnet.lua — MCAC Box Network Plugin (MacroQuest Actors)
 -- ============================================================================
 -- Inter-box communication for players running several characters on one
 -- computer. Built on MacroQuest's native `actors` module: every eqgame

@@ -1,6 +1,6 @@
 ---@diagnostic disable: undefined-global, undefined-field, need-check-nil
 -- ============================================================================
--- MCAC/lua/mcac/gm_commands.lua — MCAC GM Commands Plugin
+-- lua/mcac/gm_commands.lua — MCAC GM Commands Plugin
 -- ============================================================================
 -- A reference and runner for the EQEmu server's `#` GM commands. Off by
 -- default: it only does anything for an account with GM status, and a normal

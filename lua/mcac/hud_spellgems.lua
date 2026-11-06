@@ -1,6 +1,6 @@
 ---@diagnostic disable: undefined-global, undefined-field
 -- ============================================================================
--- MCAC/lua/mcac/hud_spellgems.lua — MCAC Popout Spell Gem Bar Plugin
+-- lua/mcac/hud_spellgems.lua — MCAC Popout Spell Gem Bar Plugin
 -- ============================================================================
 -- Modern, compact, customizable replacement for EverQuest's default spell gem
 -- bar: dual orientations, compact vs full layouts, live recast timers, active

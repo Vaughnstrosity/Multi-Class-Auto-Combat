@@ -1,6 +1,6 @@
 ---@diagnostic disable: undefined-global, undefined-field, need-check-nil
 -- ============================================================================
--- MCAC/lua/mcac/chat.lua — MCAC Chat Windows plugin
+-- lua/mcac/chat.lua — MCAC Chat Windows plugin
 -- ============================================================================
 -- A chat window replacement: every incoming chat line is captured through one
 -- catch-all mq.event, classified into a channel by pattern (the event API

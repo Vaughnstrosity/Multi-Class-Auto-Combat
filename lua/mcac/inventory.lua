@@ -1,6 +1,6 @@
 ---@diagnostic disable: undefined-global, undefined-field, need-check-nil
 -- ============================================================================
--- MCAC/lua/mcac/inventory.lua — MCAC Inventory & Bank Manager Plugin
+-- lua/mcac/inventory.lua — MCAC Inventory & Bank Manager Plugin
 -- ============================================================================
 -- In-process replacement for the old standalone mcac_inv.lua script.
 -- Comprehensive inventory, worn equipment, bank, and shared bank search,

@@ -1,6 +1,6 @@
 ---@diagnostic disable: undefined-global, undefined-field, need-check-nil
 -- ============================================================================
--- MCAC/lua/mcac/cursor.lua — MCAC Cursor Item Manager Plugin
+-- lua/mcac/cursor.lua — MCAC Cursor Item Manager Plugin
 -- ============================================================================
 -- In-process replacement for the old standalone mcac_cursor.lua script.
 -- Inspects the item currently held on the cursor, auto-inventories or destroys

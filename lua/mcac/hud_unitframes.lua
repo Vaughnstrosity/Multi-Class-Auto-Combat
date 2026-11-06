@@ -1,6 +1,6 @@
 ---@diagnostic disable: undefined-global, undefined-field
 -- ============================================================================
--- MCAC/lua/mcac/hud_unitframes.lua — MCAC Popout Unit Frames HUD Plugin
+-- lua/mcac/hud_unitframes.lua — MCAC Popout Unit Frames HUD Plugin
 -- ============================================================================
 -- An ultra-compact, fully responsive popout window that replaces default EQ
 -- target, player, and pet windows. Features real-time Target + ToT with aggro

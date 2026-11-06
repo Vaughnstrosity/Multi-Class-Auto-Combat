@@ -1,6 +1,6 @@
 ---@diagnostic disable: undefined-global, undefined-field
 -- ============================================================================
--- MCAC/lua/mcac/hud_group.lua — MCAC Popout Group Window Plugin
+-- lua/mcac/hud_group.lua — MCAC Popout Group Window Plugin
 -- ============================================================================
 -- Modern, compact party vitals: auto-scaling HP / Mana / Endurance bars,
 -- leader + role badges, member pet tracking, click-to-target, Invite / Disband

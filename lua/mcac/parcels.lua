@@ -1,6 +1,6 @@
 ---@diagnostic disable: undefined-global, undefined-field, need-check-nil
 -- ============================================================================
--- MCAC/lua/mcac/parcels.lua — MCAC Parcel Helper Plugin
+-- lua/mcac/parcels.lua — MCAC Parcel Helper Plugin
 -- ============================================================================
 -- Two jobs:
 --

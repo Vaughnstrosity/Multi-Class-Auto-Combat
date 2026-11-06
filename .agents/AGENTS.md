@@ -8,9 +8,9 @@ navigation for a "trio" of three EverQuest classes played on one character. It i
 written entirely in Lua 5.1 / LuaJIT and runs inside MacroQuest via
 `/lua run mcac`.
 
-The code is one **core** script, `MCAC/lua/mcac/init.lua` (UI, loadout, combat loop,
+The code is one **core** script, `lua/mcac/init.lua` (UI, loadout, combat loop,
 persistence, and the plugin manager), plus **in-process plugins** in
-`MCAC/lua/mcac/*.lua`. The companion tools that used to be standalone scripts
+`lua/mcac/*.lua`. The companion tools that used to be standalone scripts
 (map, DPS, inventory, cursor, buffbot, spellbook, ...) are all plugins now: they
 run inside the core's Lua state, on its main coroutine, and draw inside its
 ImGui callback.
@@ -79,28 +79,28 @@ enforces this. To change the look, edit `UI.pushTheme` only.
 
 | File | Role |
 |---|---|
-| `MCAC/lua/mcac/init.lua` | Core: main window UI and theme, loadout, combat loop, persistence, plugin manager. Entry point (`/lua run mcac`). |
-| `MCAC/lua/mcac/mcac_log.lua` | Library module (`require('mcac.mcac_log')`), not a plugin: leveled logger, print() tee, diagnostic dump. |
-| `MCAC/lua/mcac/auto_aa.lua` | Auto AA: priority purchasing through the AA window, Fireworks cap spender, Auto AA window. |
-| `MCAC/lua/mcac/auto_accept.lua` | Auto-accept group / trade / expedition invites from whitelisted, group or guild players. |
-| `MCAC/lua/mcac/boxnet.lua` | Box Network (MQ Actors): peer roster, remote `/ac` commands, message API for other plugins. |
-| `MCAC/lua/mcac/buffbot.lua` | Tell-driven buffbot station. |
-| `MCAC/lua/mcac/buttons.lua` | Button Master-style hot button bars. |
-| `MCAC/lua/mcac/chat.lua` | Chat window replacement (filtered tabs, multiple windows). |
-| `MCAC/lua/mcac/cursor.lua` | Cursor item manager. |
-| `MCAC/lua/mcac/dps.lua` | Combat-log DPS parser with its own version number. |
-| `MCAC/lua/mcac/floating_damage.lua` | Floating crit damage numbers (overlay, no window). |
-| `MCAC/lua/mcac/gamedb.lua` | Offline item / NPC / spell database browser. |
-| `MCAC/lua/mcac/gm_commands.lua` | EQEmu GM (#) command reference and runner (off by default). |
-| `MCAC/lua/mcac/hud_*.lua` | Popout HUD windows: cooldowns, effects, group, spell gems, unit frames, XTarget. |
-| `MCAC/lua/mcac/inventory.lua` | Inventory / bank manager with offline bank cache and box inventories. |
-| `MCAC/lua/mcac/map.lua` | 2D map, Norrath zone atlas, NPC tracker, camp / waypoint overlays. |
-| `MCAC/lua/mcac/nmsloot.lua` | Personal loot (#nms) console over the Box Network. |
-| `MCAC/lua/mcac/parcels.lua` | Parcel notifier and Collect All. |
-| `MCAC/lua/mcac/spellbook.lua` | Per-class spell browser and mem-to-gem queue. |
-| `MCAC/lua/mcac/update_check.lua` | GitHub release check (non-blocking, no external process). |
-| `MCAC/config/mcac_data.lua` | Era-correct spell/disc/AA database (generated, not hand-edited). |
-| `tests/`, `tools/`, `MCAC/resources/` | Local only: git-ignored and not part of the repo. Unit tests (`luajit tests/test_pure_logic.lua`), the theme check and the database build tool live here on the maintainer's machine; resource data ships with the plugins that need it. |
+| `lua/mcac/init.lua` | Core: main window UI and theme, loadout, combat loop, persistence, plugin manager. Entry point (`/lua run mcac`). |
+| `lua/mcac/mcac_log.lua` | Library module (`require('mcac.mcac_log')`), not a plugin: leveled logger, print() tee, diagnostic dump. |
+| `lua/mcac/auto_aa.lua` | Auto AA: priority purchasing through the AA window, Fireworks cap spender, Auto AA window. |
+| `lua/mcac/auto_accept.lua` | Auto-accept group / trade / expedition invites from whitelisted, group or guild players. |
+| `lua/mcac/boxnet.lua` | Box Network (MQ Actors): peer roster, remote `/ac` commands, message API for other plugins. |
+| `lua/mcac/buffbot.lua` | Tell-driven buffbot station. |
+| `lua/mcac/buttons.lua` | Button Master-style hot button bars. |
+| `lua/mcac/chat.lua` | Chat window replacement (filtered tabs, multiple windows). |
+| `lua/mcac/cursor.lua` | Cursor item manager. |
+| `lua/mcac/dps.lua` | Combat-log DPS parser with its own version number. |
+| `lua/mcac/floating_damage.lua` | Floating crit damage numbers (overlay, no window). |
+| `lua/mcac/gamedb.lua` | Offline item / NPC / spell database browser. |
+| `lua/mcac/gm_commands.lua` | EQEmu GM (#) command reference and runner (off by default). |
+| `lua/mcac/hud_*.lua` | Popout HUD windows: cooldowns, effects, group, spell gems, unit frames, XTarget. |
+| `lua/mcac/inventory.lua` | Inventory / bank manager with offline bank cache and box inventories. |
+| `lua/mcac/map.lua` | 2D map, Norrath zone atlas, NPC tracker, camp / waypoint overlays. |
+| `lua/mcac/nmsloot.lua` | Personal loot (#nms) console over the Box Network. |
+| `lua/mcac/parcels.lua` | Parcel notifier and Collect All. |
+| `lua/mcac/spellbook.lua` | Per-class spell browser and mem-to-gem queue. |
+| `lua/mcac/update_check.lua` | GitHub release check (non-blocking, no external process). |
+| `config/mcac_data.lua` | Era-correct spell/disc/AA database (generated, not hand-edited). |
+| `tests/`, `tools/`, `resources/` | Local only: git-ignored and not part of the repo. Unit tests (`luajit tests/test_pure_logic.lua`), the theme check and the database build tool live here on the maintainer's machine; resource data ships with the plugins that need it. |
 | `CHANGELOG.md` | Full history of changes, newest date first. |
 | `RELEASES.md` | Short per-release summary (`## <version>`), used for the GitHub release body. |
 | `README.md` | User-facing documentation including commands, features, file structure. |
@@ -153,7 +153,7 @@ Rules:
 
 ### Version Number Locations
 
-The canonical version is defined in `MCAC/lua/mcac/init.lua`:
+The canonical version is defined in `lua/mcac/init.lua`:
 ```lua
 local VERSION           = '3.4'
 ```
@@ -163,14 +163,14 @@ The README must always reflect this value:
 Current version: **3.4**
 ```
 
-When you bump the version, update `MCAC/lua/mcac/init.lua` and the `README.md`.
+When you bump the version, update `lua/mcac/init.lua` and the `README.md`.
 CI (`.github/workflows/ci.yml`) fails if these drift apart, and the release
 workflow refuses a tag that does not match `VERSION` or has no `## <version>`
 entry in `RELEASES.md`.
 
 ### Binary Files Policy
 
-The repo holds only `MCAC/lua` and `MCAC/config`; large data and tests are kept out of it. Do not use Git LFS.
+The repo holds only `lua/` and `config/`; large data and tests are kept out of it. Do not use Git LFS.
 
 ## Lua Compatibility Rules
 
@@ -248,7 +248,7 @@ When adding new state, always add it to the appropriate table — never add a ba
 - Top-level `local var = ...` statements count as local variables in the main chunk.
 - Block locals at the file level (e.g. inside file-level `if ... end` blocks) count against the main chunk's active register slots.
 - **NEVER define bare top-level functions or state when extending `mcac.lua`.** Attach functions and state to `runtime` (e.g., `function runtime.myHelper(...)`), `UI` (e.g., `function UI.myWindow(...)`), or other structured tables.
-- **ALWAYS verify local variable counts with `luac -l -p MCAC/lua/mcac/init.lua`**: Verify that the main chunk slots count is well below 200 (target `<= 185`). CI automatically enforces `luac -p` compilation and unit tests verify this threshold.
+- **ALWAYS verify local variable counts with `luac -l -p lua/mcac/init.lua`**: Verify that the main chunk slots count is well below 200 (target `<= 185`). CI automatically enforces `luac -p` compilation and unit tests verify this threshold.
 
 
 ---

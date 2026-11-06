@@ -1,6 +1,6 @@
 ---@diagnostic disable: undefined-global, undefined-field
 -- ============================================================================
--- MCAC/lua/mcac/hud_xtarget.lua — MCAC Popout Extended Target Window Plugin
+-- lua/mcac/hud_xtarget.lua — MCAC Popout Extended Target Window Plugin
 -- ============================================================================
 -- Compact, auto-scaling replacement for EverQuest's Extended Target window:
 -- con-colored names, HP bars, aggro %, distance / LoS, target-of-target, a

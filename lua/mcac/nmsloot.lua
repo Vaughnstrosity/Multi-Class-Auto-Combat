@@ -1,6 +1,6 @@
 ---@diagnostic disable: undefined-global, undefined-field, need-check-nil
 -- ============================================================================
--- MCAC/lua/mcac/nmsloot.lua — MCAC NMS Loot Plugin (personal loot console)
+-- lua/mcac/nmsloot.lua — MCAC NMS Loot Plugin (personal loot console)
 -- ============================================================================
 -- The server's personal loot system ("NMS loot") offers each kill's items to
 -- the group's *active looter*: one character holds that slot and decides,

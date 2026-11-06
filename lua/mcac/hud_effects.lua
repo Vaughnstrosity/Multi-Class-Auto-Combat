@@ -1,6 +1,6 @@
 ---@diagnostic disable: undefined-global, undefined-field, need-check-nil
 -- ============================================================================
--- MCAC/lua/mcac/hud_effects.lua — MCAC Popout Effects & Songs Window Plugin
+-- lua/mcac/hud_effects.lua — MCAC Popout Effects & Songs Window Plugin
 -- ============================================================================
 -- Unified view of active buffs, songs & disciplines: full spell names, native
 -- spell icons, remaining-time progress bars, multi-criteria sorting, and a

@@ -1,6 +1,6 @@
 ---@diagnostic disable: undefined-global, undefined-field, need-check-nil
 -- ============================================================================
--- MCAC/lua/mcac/buffbot.lua — MCAC Buffbot Plugin
+-- lua/mcac/buffbot.lua — MCAC Buffbot Plugin
 -- ============================================================================
 -- In-process replacement for the old standalone mcac_buffbot.lua script (v1.7).
 -- Interactive tell-menu buffbot: replies to /tells with the memorized spell
