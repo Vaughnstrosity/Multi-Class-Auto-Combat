@@ -72,7 +72,7 @@ There is exactly **one** theme: `UI.pushTheme()` / `UI.popTheme()` in
 plugin window wraps its `ImGui.Begin` ... `ImGui.End` in
 `core.pushTheme()` / `core.popTheme()` and uses the colours from `core.colors`.
 Plugins must **not** define their own `pushTheme` / `popTheme` or push the theme
-colour tuples themselves. `tests/check_theme_consistency.sh` (run by CI)
+colour tuples themselves. `tests/check_theme_consistency.sh` (local only)
 enforces this. To change the look, edit `UI.pushTheme` only.
 
 ## File Map
@@ -90,7 +90,7 @@ enforces this. To change the look, edit `UI.pushTheme` only.
 | `MCAC/lua/mcac/cursor.lua` | Cursor item manager. |
 | `MCAC/lua/mcac/dps.lua` | Combat-log DPS parser with its own version number. |
 | `MCAC/lua/mcac/floating_damage.lua` | Floating crit damage numbers (overlay, no window). |
-| `MCAC/lua/mcac/gamedb.lua` | Offline item / NPC / spell database browser (data in `MCAC/resources/gamedb/`). |
+| `MCAC/lua/mcac/gamedb.lua` | Offline item / NPC / spell database browser. |
 | `MCAC/lua/mcac/gm_commands.lua` | EQEmu GM (#) command reference and runner (off by default). |
 | `MCAC/lua/mcac/hud_*.lua` | Popout HUD windows: cooldowns, effects, group, spell gems, unit frames, XTarget. |
 | `MCAC/lua/mcac/inventory.lua` | Inventory / bank manager with offline bank cache and box inventories. |
@@ -100,9 +100,7 @@ enforces this. To change the look, edit `UI.pushTheme` only.
 | `MCAC/lua/mcac/spellbook.lua` | Per-class spell browser and mem-to-gem queue. |
 | `MCAC/lua/mcac/update_check.lua` | GitHub release check (non-blocking, no external process). |
 | `MCAC/config/mcac_data.lua` | Era-correct spell/disc/AA database (generated, not hand-edited). |
-| `MCAC/resources/gamedb/` | Game database files, built by `tools/build_gamedb.py` from the server SQL dump. |
-| `tests/test_pure_logic.lua` | Unit tests (`luajit tests/test_pure_logic.lua`); test the real functions via `loadFunc` / plugin loading, not local copies. |
-| `tests/check_theme_consistency.sh`, `tests/ci_local.sh` | Theme check; local run of every CI check. |
+| `tests/`, `tools/`, `MCAC/resources/` | Local only: git-ignored and not part of the repo. Unit tests (`luajit tests/test_pure_logic.lua`), the theme check and the database build tool live here on the maintainer's machine; resource data ships with the plugins that need it. |
 | `CHANGELOG.md` | Full history of changes, newest date first. |
 | `RELEASES.md` | Short per-release summary (`## <version>`), used for the GitHub release body. |
 | `README.md` | User-facing documentation including commands, features, file structure. |
@@ -170,15 +168,9 @@ CI (`.github/workflows/ci.yml`) fails if these drift apart, and the release
 workflow refuses a tag that does not match `VERSION` or has no `## <version>`
 entry in `RELEASES.md`.
 
-### Binary Files Policy (Do NOT use Git LFS)
+### Binary Files Policy
 
-The committed binary / large data files (MQ2Nav navmeshes, `ItemDB.txt`, the
-`gamedb` data files, etc.) must stay as regular git objects. Do NOT migrate them to Git LFS: GitHub source archives
-and `git archive` emit LFS *pointer files* instead of real content, which would
-corrupt every distribution path (release zips, repo ZIP downloads, and
-release asset downloads).
-
----
+The repo holds only `MCAC/lua` and `MCAC/config`; large data and tests are kept out of it. Do not use Git LFS.
 
 ## Lua Compatibility Rules
 

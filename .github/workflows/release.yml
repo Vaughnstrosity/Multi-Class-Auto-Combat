@@ -16,7 +16,7 @@ permissions:
   contents: write
 
 jobs:
-  # Same checks as CI (syntax, version sync, luacheck, unit tests, theme),
+  # Same checks as CI (syntax, version sync, luacheck),
   # run against the tag being released. Publishing waits for all of them.
   ci:
     uses: ./.github/workflows/ci.yml
@@ -99,13 +99,13 @@ jobs:
 
           ### 🆕 New installation
           1. Download the latest **RoF2** MacroQuest from https://github.com/macroquest/macroquest/releases and extract it somewhere like `C:\\MacroQuest`.
-          2. Download **`MCAC-full.zip`** from the Assets below. It has everything: the Lua scripts, config, the offline game database (`resources/gamedb/`) and the MQ2Nav zone navmeshes (`resources/MQ2Nav/`).
-          3. Extract the zip **into the root of your MacroQuest folder**. It merges `lua/`, `config/` and `resources/` into place.
+          2. Download **`MCAC.zip`** from the Assets below. It has the Lua scripts and config.
+          3. Extract the zip **into the root of your MacroQuest folder**. It merges `lua/` and `config/` into place.
           4. Windows users: add your MacroQuest folder as an antivirus exception before running it.
           5. Start `MacroQuest.exe`, then log into Project Triune. MCAC opens by itself when you log in - if you close it, type `/ac` or `/lua run mcac`.
 
           ### 🔄 Updating an existing installation
-          1. Download **`MCAC-Update.zip`** from the Assets below. It has everything except the MQ2Nav navmeshes (they rarely change) - grab the full zip if you also need those.
+          1. Download **`MCAC.zip`** from the Assets below.
           2. Extract it **into the root of your MacroQuest folder** and overwrite files if asked.
           3. If MCAC was running, type `/ac restart` (or relog) to load the new version.
 
@@ -120,35 +120,24 @@ jobs:
           print(open('RELEASE_NOTES.md', encoding='utf-8').read())
           EOF
 
-      - name: Package Release Archives
+      - name: Package Release Archive
         run: |
-          # Both archives are built from the MCAC/ tree so new modules, config
-          # and resource files are picked up automatically. The update zip
-          # ships everything except the MQ2Nav navmeshes (~1 GB, rarely
-          # change); the full zip ships the whole tree.
+          # Built from the MCAC/ tree so new modules and config files are picked up automatically.
           git archive --format=zip --add-file=README.md --add-file=CHANGELOG.md \
-            -o MCAC-Update.zip HEAD:MCAC . ':!resources/MQ2Nav'
-          git archive --format=zip --add-file=README.md --add-file=CHANGELOG.md \
-            -o MCAC-full.zip HEAD:MCAC .
+            -o MCAC.zip HEAD:MCAC .
 
       - name: Verify Archive Contents
         run: |
           set -e
-          for z in MCAC-Update.zip MCAC-full.zip; do
-            echo "== $z ($(du -h "$z" | cut -f1))"
-            unzip -l "$z" | grep -v '/MQ2Nav/'
-            unzip -l "$z" | grep -q 'lua/mcac/init.lua' || { echo "missing lua/mcac/init.lua in $z"; exit 1; }
-            unzip -l "$z" | grep -q 'gamedb/manifest.txt' || { echo "missing resources/gamedb in $z"; exit 1; }
-          done
-          unzip -l MCAC-Update.zip | grep -q '\.navmesh' && { echo "update zip must not contain navmeshes"; exit 1; }
-          unzip -l MCAC-full.zip   | grep -q '\.navmesh' || { echo "full zip is missing navmeshes"; exit 1; }
-          echo "Archives verified"
+          unzip -l MCAC.zip
+          unzip -l MCAC.zip | grep -q 'lua/mcac/init.lua' || { echo "missing lua/mcac/init.lua"; exit 1; }
+          echo "Archive verified"
+
       - name: Create or Update Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            MCAC-Update.zip
-            MCAC-full.zip
+            MCAC.zip
           tag_name: ${{ inputs.tag_name || github.ref_name }}
           body_path: RELEASE_NOTES.md
         env:

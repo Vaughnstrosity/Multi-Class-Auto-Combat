@@ -12,9 +12,8 @@ MCAC is a fork of [Triune AutoCombat](https://github.com/gennro/TriuneAutocombat
 
 1. Download the latest **RoF2** MacroQuest from [macroquest/macroquest/releases](https://github.com/macroquest/macroquest/releases) and extract it somewhere like `C:\MacroQuest`.
 2. Download MCAC from [MCAC releases](https://github.com/Vaughnstrosity/Multi-Class-Auto-Combat/releases/latest):
-   - **`MCAC-full.zip`** - first install. Has everything, including the MQ2Nav zone navmeshes.
-   - **`MCAC-Update.zip`** - updating. Everything except the navmeshes (they rarely change).
-3. Extract the zip **into the root of your MacroQuest folder**. It merges `lua/`, `config/` and `resources/` into place. Overwrite if asked - your own settings and loadouts are never touched.
+   - **`MCAC.zip`** - the Lua scripts and config. Use it for both a first install and updates.
+3. Extract the zip **into the root of your MacroQuest folder**. It merges `lua/` and `config/` into place. Overwrite if asked - your own settings and loadouts are never touched.
 4. Start `MacroQuest.exe`, then log into Project Triune.
 
 MCAC opens by itself when you log in. If you close it, type `/ac` or `/lua run mcac`.
@@ -137,8 +136,6 @@ All paths are inside your MacroQuest folder.
 | `Logs/mcac_*.log` | Diagnostic logs (when Log To File is on). |
 | `lua/mcac/init.lua` | The bot itself (run with `/lua run mcac`). If you are updating from the Triune AutoCombat names, delete the old `lua/triune.lua` (or `lua/triune/`) and `lua/tac/` folder. |
 | `lua/mcac/*.lua` | The plugins listed above (everything except `init.lua`). Drop your own `.lua` plugin here and it loads. |
-| `resources/gamedb/` | The offline game database (in both release zips). |
-| `resources/MQ2Nav/` | Zone navmeshes (full release only). |
 
 ---
 

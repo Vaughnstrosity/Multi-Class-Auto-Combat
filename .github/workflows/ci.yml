@@ -89,28 +89,3 @@ jobs:
 
       - name: Run Luacheck
         run: luacheck MCAC/
-
-  unit-tests:
-    name: Pure-logic unit tests
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.ref || github.ref }}
-
-      - name: Install Lua and LuaJIT
-        run: sudo apt-get update && sudo apt-get install -y luajit lua5.1
-
-      - name: Run unit tests
-        run: luajit tests/test_pure_logic.lua
-
-  theme-consistency:
-    name: Theme consistency check
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.ref || github.ref }}
-
-      - name: Check satellite theme drift
-        run: bash tests/check_theme_consistency.sh

@@ -4,3 +4,8 @@ err.log
 # Python bytecode (tools/build_gamedb.py)
 __pycache__/
 *.pyc
+
+# Local-only (not part of the repo): unit tests, build tools, bundled resources
+/tests/
+/tools/
+/MCAC/resources/
