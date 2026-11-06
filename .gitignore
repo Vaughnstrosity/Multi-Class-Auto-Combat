@@ -10,3 +10,5 @@ __pycache__/
 /tests/
 /tools/
 /resources/
+/config/mcac_buffbot_config.lua
+/config/mcac_dps_*.lua
