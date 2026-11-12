@@ -359,6 +359,11 @@ local function getConfigFilePath()
     cachedConfigPath = string.format('%s/mcac_dps_%s_%s.lua', dir, tag, myName)
     -- older versions kept one file per character name (no server)
     if core and core.migrateFile then
+        -- 3.6.0 could not read the server name and wrote "unknown" files; they
+        -- hold the newest settings, so they are claimed before the name-only ones.
+        if tag ~= 'unknown' then
+            core.migrateFile(string.format('%s/mcac_dps_unknown_%s.lua', dir, myName), cachedConfigPath)
+        end
         core.migrateFile(string.format('%s/mcac_dps_%s.lua', dir, myName), cachedConfigPath)
     end
     return cachedConfigPath

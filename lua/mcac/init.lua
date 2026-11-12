@@ -61,7 +61,7 @@ do
         end
     end)
 end
-local VERSION           = '3.6.0'
+local VERSION           = '3.6.1'
 local open              = true
 -- File-backed diagnostic logger. Hooked into print() right away so every
 -- chat line from here on (core and plugins) is captured in its ring buffer;
@@ -2713,6 +2713,18 @@ function runtime.invalidatePluginProbes()
 end
 
 
+-- Movement diagnostics (Debug Diagnostic Logging): says WHY movement was
+-- halted or re-issued, so "walks a few steps then stops" can be traced to a
+-- cast, an arrival, a stall or a hold. Throttled per reason to stay readable.
+function runtime.moveDebug(reason, detail)
+    if not (ctrl and ctrl.debug_mode) then return end
+    runtime.moveDebugAt = runtime.moveDebugAt or {}
+    local now = os.clock()
+    if (now - (runtime.moveDebugAt[reason] or 0)) < 0.5 then return end
+    runtime.moveDebugAt[reason] = now
+    print(string.format('\ao[MOVE]\ax %s%s', tostring(reason), detail and (' -- ' .. tostring(detail)) or ''))
+end
+
 local function isMoveActive()
     local navActive, moveActive, moveToActive, nativeActive = false, false, false, false
     if navLoaded() then
@@ -2739,7 +2751,10 @@ local function isMoveActive()
     return navActive or moveActive or moveToActive or nativeActive
 end
 
-local function stopMoving()
+local function stopMoving(reason)
+    if reason and ctrl and ctrl.debug_mode and isMoveActive() then
+        if runtime.moveDebug then runtime.moveDebug('stop: ' .. tostring(reason)) end
+    end
     if navLoaded() then
         local navActive = false
         pcall(function() navActive = mq.TLO.Navigation.Active() or false end)
@@ -2793,6 +2808,8 @@ function runtime.stopMovementForCast(cls, spell)
         local navActive = false
         pcall(function() navActive = mq.TLO.Navigation.Active() or false end)
         if navActive then
+            if runtime.moveDebug then runtime.moveDebug('halt: cast start', tostring(spell)) end
+            runtime.navHaltedAt = os.clock()
             pcall(function() mq.cmd('/nav stop') end)
             pursuit.id = 0
             pursuit.lastNavTargetId = 0
@@ -5394,8 +5411,8 @@ tlog.init({
     getDebug       = function() return ctrl and ctrl.debug_mode == true end,
     identity       = function()
         local serverName = ''
-        pcall(function() serverName = mq.TLO.EverQuest.ServerName() or '' end)
-        if serverName == '' then pcall(function() serverName = mq.TLO.Zone.Server() or '' end) end
+        pcall(function() serverName = mq.TLO.EverQuest.Server() or '' end)
+        if serverName == '' then pcall(function() serverName = mq.TLO.MacroQuest.Server() or '' end) end
         return serverName, myName or ''
     end,
     headerInfo     = function()
@@ -5989,6 +6006,19 @@ function runtime.loadAll()
         -- its outgoing settings must be flushed to THIS file, not the new one.
         runtime.activeServer = runtime.currentServer()
         runtime.activePath = path
+        print(string.format('\ag[MCAC]\ax Settings: server "%s", character "%s".',
+            runtime.activeServer ~= '' and runtime.activeServer or '(unknown)', tostring(myName)))
+        -- First start on a known server: claim a copy of the file written
+        -- before servers were told apart -- 3.6.0 wrote it with an empty
+        -- server segment (mcac_loadout__<char>.lua) because it read a TLO
+        -- member that does not exist; earlier versions used mcac_loadout_<char>.lua.
+        -- Originals are left in place so a second server's first start copies them too.
+        if runtime.activeServer ~= '' then
+            local safeName = tostring(myName):gsub('[^%w%_-]', '_')
+            local idm = require('mcac.mcac_id')
+            local _ = idm.migrateFile(mq.configDir .. '/mcac_loadout__' .. safeName .. '.lua', path)
+                or idm.migrateFile(mq.configDir .. '/mcac_loadout_' .. safeName .. '.lua', path)
+        end
         -- A save whose final rename failed leaves the only good copy in .tmp.
         for _, p in ipairs({ path, path .. '.tmp' }) do
             local fn = loadfile(p)
@@ -20881,7 +20911,7 @@ function runtime.moveToward(id, dist, followOnly)
     local losOk = losNow or (pursuit.lastLoSAt > 0 and (os.clock() - pursuit.lastLoSAt) < NAV_CONST.LOS_FLICKER_GRACE)
 
     if d <= effectiveArrivalDist and (losOk or d <= NAV_CONST.LOS_TRUST_RANGE) then
-        stopMoving()
+        stopMoving(string.format('arrived (d=%.1f <= %.1f)', d, effectiveArrivalDist))
         if not followOnly then
             if mq.TLO.Target.ID() ~= id then runtime.setTarget(id) end
             if (os.clock() - (pursuit.lastCombatFaceAt or 0)) > 0.4 then
@@ -20910,6 +20940,7 @@ function runtime.moveToward(id, dist, followOnly)
 
     if (os.clock() - pursuit.improvedAt) > NAV_CONST.PURSUIT_STALL_TIMEOUT or pursuit.navStalls >= 3 then
         if not followOnly then
+            if runtime.moveDebug then runtime.moveDebug('stall detected', string.format('navStalls=%d noProgress=%.1fs', pursuit.navStalls or 0, os.clock() - pursuit.improvedAt)) end
             if pursuit.stallRecoveryId ~= id then
                 pursuit.stallRecoveryId = id
                 pursuit.stallRecoveryCount = 0
@@ -20965,10 +20996,16 @@ function runtime.moveToward(id, dist, followOnly)
             pursuit.noPathFails = 0
             local navActiveNow = mq.TLO.Navigation.Active()
             if pursuit.wasNavActive and not navActiveNow then
-                pursuit.navStalls = pursuit.navStalls + 1
+                -- A nav we halted ourselves for a cast is not a stall.
+                if (os.clock() - (runtime.navHaltedAt or 0)) > 3.0 then
+                    pursuit.navStalls = pursuit.navStalls + 1
+                else
+                    if runtime.moveDebug then runtime.moveDebug('nav ended after our own halt', 'not counted as a stall') end
+                end
             end
             pursuit.wasNavActive = navActiveNow
             if pursuit.lastNavTargetId ~= id or not navActiveNow then
+                if runtime.moveDebug then runtime.moveDebug('nav issue', string.format('id=%d d=%.1f goal=%d', id, d, math.floor(targetDist))) end
                 mq.cmdf('/nav id %d distance=%d', id, math.floor(targetDist))
                 pursuit.lastNavTargetId = id
             end
@@ -21029,6 +21066,7 @@ local function repositionCloser()
     pursuit.lastTooFarRepositionAt = os.clock()
 
     local currentDist = distToId(tid)
+    if runtime.moveDebug then runtime.moveDebug('repositionCloser', string.format('d=%.1f navActive=%s', currentDist, tostring(isMoveActive()))) end
     -- When EQ reports "too far away", ensure we close in tighter than current distance
     local targetDist = desiredRange(tid)
     if (ctrl and ctrl.combat_style) ~= 'Melee' then
@@ -23999,8 +24037,30 @@ local function manualMovePolicy(engaged, approaching)
     return ctrl.manual_auto_nav and 'move' or 'wait'
 end
 
+-- MQ2MoveUtils' own AutoPause halts /stick whenever the character casts a
+-- spell (non-bard) or has itself targeted -- which is exactly what a self or
+-- group heal does -- so Cast While Moving cannot work while it is on. Turn it
+-- off while the setting is enabled, and put it back when the setting is off.
+function runtime.syncStickAutoPause()
+    local want = (ctrl.cast_while_moving == true)
+    if not stickLoaded() then
+        runtime.autoPauseForced = false -- plugin (re)loaded later starts from its ini again
+        return
+    end
+    if want and not runtime.autoPauseForced then
+        runtime.autoPauseForced = true
+        mq.cmd('/stick set autopause off')
+        if runtime.moveDebug then runtime.moveDebug('stick autopause', 'turned OFF (Cast While Moving)') end
+    elseif not want and runtime.autoPauseForced then
+        runtime.autoPauseForced = false
+        mq.cmd('/stick set autopause on')
+        if runtime.moveDebug then runtime.moveDebug('stick autopause', 'turned back ON') end
+    end
+end
+
 local function combatTick()
     runtime.wpBeginTick()
+    if runtime.syncStickAutoPause then runtime.syncStickAutoPause() end
     local fullStop = runtime.fullStop
     local anyXtarAlive = runtime.anyXtarAlive
     local countNPCXtarget = runtime.countNPCXtarget
@@ -24148,7 +24208,31 @@ local function combatTick()
         end
         local isBrd = false
         pcall(function() isBrd = (mq.TLO.Me.Class.ShortName() == 'BRD') end)
-        if castTracker.activeKind ~= 'Brd' and not isBrd then
+        if ctrl.cast_while_moving == true then
+            -- Cast While Moving: leave nav/stick running. Keep closing on an
+            -- out-of-reach hostile target so the approach isn't suspended for
+            -- the length of the cast (this branch returns before the normal
+            -- approach logic runs).
+            local tgt = mq.TLO.Target
+            local ctid = (tgt() and tgt.ID()) or 0
+            local mayMove = ctid > 0 and ctrl.running and not (ctrl.mode == 'Manual' and ctrl.manual_stick == false)
+            if mayMove then
+                local okH, hostile = pcall(isHostileTarget, ctid)
+                if okH and hostile then
+                    local style0 = ctrl.combat_style or 'Melee'
+                    local reach0 = (style0 == 'Melee') and maxMeleeDistance(ctid) or (ctrl.ranged_dist or 40)
+                    local cd = distToId(ctid)
+                    if cd > reach0 and (os.clock() - (runtime.lastRecloseAt or 0)) >= 1.0
+                        and (not isMoveActive() or (pursuit and pursuit.lastNavTargetId ~= ctid)) then
+                        runtime.lastRecloseAt = os.clock()
+                        if runtime.moveDebug then runtime.moveDebug('reclose while casting', string.format('d=%.1f reach=%.1f', cd, reach0)) end
+                        moveToward(ctid, desiredRange(ctid))
+                    end
+                end
+            end
+        elseif castTracker.activeKind ~= 'Brd' and not isBrd then
+            if runtime.moveDebug then runtime.moveDebug('halt: casting', tostring(castTracker.activeSpell)) end
+            runtime.navHaltedAt = os.clock()
             if navLoaded() then
                 local navActive = false
                 pcall(function() navActive = mq.TLO.Navigation.Active() or false end)
@@ -24354,7 +24438,7 @@ local function combatTick()
                     manualHold = true
                     engage = true
                     if isMoveActive() then
-                        stopMoving()
+                        stopMoving('manual hold (Stick off, engaged)')
                         pursuit.id = 0
                         pursuit.lastNavTargetId = 0
                     end
@@ -24981,11 +25065,18 @@ local function combatTick()
                         mq.cmd('/face fast')
                     end
                 end
-            elseif not isMoveActive() and curDist > maxReach and tid > 0 then
+            elseif curDist > maxReach and tid > 0
+                and (not isMoveActive() or (pursuit and pursuit.lastNavTargetId ~= tid))
+                and (os.clock() - (runtime.lastRecloseAt or 0)) >= 1.0 then
                 -- Mob moved, was pushed, or is out of striking/ranged reach: re-close distance.
-                -- Ranged/Spell wait for the current cast to finish first -- starting a
-                -- nav mid-cast just interrupts it for a few units of drift.
-                if ctrl.mode ~= 'Manual' and (style == 'Melee' or not isCasting()) then
+                -- Re-issued whenever nav is not already heading for this mob (not only
+                -- when idle), at most once a second, so a nav that was halted or ended
+                -- early restarts at once instead of waiting for the 15 s watchdog.
+                -- Ranged/Spell wait for the current cast to finish first unless Cast
+                -- While Moving is on.
+                if ctrl.mode ~= 'Manual' and (style == 'Melee' or ctrl.cast_while_moving == true or not isCasting()) then
+                    runtime.lastRecloseAt = os.clock()
+                    if runtime.moveDebug then runtime.moveDebug('reclose', string.format('d=%.1f reach=%.1f navActive=%s', curDist, maxReach, tostring(isMoveActive()))) end
                     moveToward(tid, desiredRange(tid))
                 end
             end

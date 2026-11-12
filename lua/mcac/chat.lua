@@ -869,6 +869,11 @@ local function configPath()
     end)
     local dir = (mq and mq.configDir) or 'config'
     rt.configPath = string.format('%s/mcac_chat_%s_%s.lua', dir, rt.serverTag(), name)
+    -- 3.6.0 wrote "unknown"-server files (it could not read the server name);
+    -- they hold the newest settings, so claim them first
+    if rt.serverTag() ~= 'unknown' then
+        rt.migrateFile(string.format('%s/mcac_chat_unknown_%s.lua', dir, name), rt.configPath)
+    end
     -- older versions kept one file per character name (no server)
     rt.migrateFile(string.format('%s/mcac_chat_%s.lua', dir, name), rt.configPath)
     return rt.configPath
@@ -1975,6 +1980,9 @@ H.FIELDS = 7
 function H.path()
     local dir = ((mq and mq.configDir) or 'config'):gsub('[/\\]+$', '')
     local path = string.format('%s/mcac_chat_history_%s_%s.txt', dir, rt.serverTag(), safeFileName(myName()))
+    if rt.serverTag() ~= 'unknown' then
+        rt.migrateFile(string.format('%s/mcac_chat_history_unknown_%s.txt', dir, safeFileName(myName())), path)
+    end
     -- older versions kept one history file per character name (no server)
     rt.migrateFile(string.format('%s/mcac_chat_history_%s.txt', dir, safeFileName(myName())), path)
     return path

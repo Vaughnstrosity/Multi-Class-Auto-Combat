@@ -20,8 +20,11 @@ end
 function M.server()
     local okMq, mq = pcall(require, 'mq')
     if not okMq or type(mq) ~= 'table' or not mq.TLO then return '' end
-    local s = tlo(function() return mq.TLO.EverQuest.ServerName() end)
-    if s == '' then s = tlo(function() return mq.TLO.Zone.Server() end) end
+    -- EverQuest.Server is the real member ("Full name of your server");
+    -- MacroQuest.Server is the same value. (3.6.0 read two member names that
+    -- do not exist, got nothing, and so never separated servers.)
+    local s = tlo(function() return mq.TLO.EverQuest.Server() end)
+    if s == '' then s = tlo(function() return mq.TLO.MacroQuest.Server() end) end
     return s
 end
 
