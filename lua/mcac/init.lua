@@ -7017,6 +7017,62 @@ end
 -- ============================================================================
 local UI = {}
 
+-- Shift+click on any slider (core and plugins -- they share this ImGui) turns it
+-- into a text box: type the value, press Enter. Ctrl+click already does this
+-- natively in ImGui; this adds the shift variant and works for every slider
+-- because SliderInt / SliderFloat are wrapped once here. Click away or Esc to cancel.
+if ImGui and ImGui.SliderInt and ImGui.SliderFloat and ImGui.InputInt and ImGui.InputFloat
+    and ImGui.GetIO and not ImGui.__mcacSliderTyping then
+    local typing = {}
+    local function shiftHeld()
+        local ok, v = pcall(function() return ImGui.GetIO().KeyShift end)
+        return ok and v == true
+    end
+    local function wrap(orig, isInt)
+        return function(label, value, vmin, vmax, ...)
+            local t = typing[label]
+            if t then
+                ImGui.SetNextItemWidth(t.width)
+                if t.fresh then ImGui.SetKeyboardFocusHere() end
+                local flags = ImGuiInputTextFlags and ImGuiInputTextFlags.EnterReturnsTrue or 0
+                local nv, done
+                if isInt then
+                    nv, done = ImGui.InputInt(label, value, 0, 0, flags)
+                else
+                    nv, done = ImGui.InputFloat(label, value, 0, 0, '%.3f', flags)
+                end
+                local active = ImGui.IsItemActive()
+                if t.fresh then
+                    t.fresh = false
+                    t.frames = 0
+                else
+                    t.frames = (t.frames or 0) + 1
+                end
+                if done then
+                    typing[label] = nil
+                    nv = tonumber(nv) or value
+                    if vmin and nv < vmin then nv = vmin end
+                    if vmax and nv > vmax then nv = vmax end
+                    if isInt then nv = math.floor(nv + 0.5) end
+                    return nv, true
+                end
+                if not active and t.frames >= 2 then typing[label] = nil end
+                return value, false
+            end
+            local nv, used = orig(label, value, vmin, vmax, ...)
+            if ImGui.IsItemHovered() and ImGui.IsMouseClicked(0) and shiftHeld() then
+                local okW, w = pcall(ImGui.CalcItemWidth)
+                typing[label] = { fresh = true, width = (okW and tonumber(w)) or 180 }
+                return value, false
+            end
+            return nv, used
+        end
+    end
+    ImGui.SliderInt = wrap(ImGui.SliderInt, true)
+    ImGui.SliderFloat = wrap(ImGui.SliderFloat, false)
+    ImGui.__mcacSliderTyping = true
+end
+
 function UI.accent(c, txt) ImGui.TextColored(c[1], c[2], c[3], c[4], txt) end
 local accent = UI.accent
 function UI.setTooltip(fmt, ...)
@@ -12809,13 +12865,13 @@ function UI.drawControlTab()
                     .. 'Ctrl+click the slider to type an exact value.')
             end
             ImGui.SetNextItemWidth(UI.px(180))
-            ctrl.hunter_z_plane = ImGui.SliderInt('Floor Height (Z Plane)', ctrl.hunter_z_plane or 15, 5, 50)
+            ctrl.hunter_z_plane = ImGui.SliderInt('Floor Height (Z Plane)', ctrl.hunter_z_plane or 15, 5, 1000)
             if ImGui.IsItemHovered() then
                 ImGui.SetTooltip(
                     'Tier 1 vertical search threshold. MCAC prioritizes NPCs on the same floor or Z plane\nwithin this height difference before searching other floors.')
             end
             ImGui.SetNextItemWidth(UI.px(180))
-            ctrl.hunter_z = ImGui.SliderInt('Max Height Diff (Z)', ctrl.hunter_z or 75, 10, 300)
+            ctrl.hunter_z = ImGui.SliderInt('Max Height Diff (Z)', ctrl.hunter_z or 75, 10, 1000)
             if ImGui.IsItemHovered() then
                 ImGui.SetTooltip(
                     'Tier 2 vertical search limit. If no valid NPCs are found on your immediate floor,\nMcac expands search up to this maximum height difference across floors and ledges.')
@@ -26483,20 +26539,20 @@ local function mcacCommand(...)
     elseif cmd == 'huntz' or cmd == 'z' then
         local val = tonumber(args[2])
         if val then
-            ctrl.hunter_z = math.max(10, math.min(300, math.floor(val)))
+            ctrl.hunter_z = math.max(10, math.min(1000, math.floor(val)))
             runtime.saveLoadout(true)
             print(string.format('\ag[MCAC]\ax Hunter Max Height Diff (Z) set to %d units.', ctrl.hunter_z))
         else
-            print(string.format('\ag[MCAC]\ax Current Hunter Max Height Diff (Z): %d units. (usage: /ac huntz [10-300])', ctrl.hunter_z or 75))
+            print(string.format('\ag[MCAC]\ax Current Hunter Max Height Diff (Z): %d units. (usage: /ac huntz [10-1000])', ctrl.hunter_z or 75))
         end
     elseif cmd == 'zplane' or cmd == 'huntplane' or cmd == 'floorz' then
         local val = tonumber(args[2])
         if val then
-            ctrl.hunter_z_plane = math.max(5, math.min(100, math.floor(val)))
+            ctrl.hunter_z_plane = math.max(5, math.min(1000, math.floor(val)))
             runtime.saveLoadout(true)
             print(string.format('\ag[MCAC]\ax Hunter Floor Height (Z Plane) set to %d units.', ctrl.hunter_z_plane))
         else
-            print(string.format('\ag[MCAC]\ax Current Hunter Floor Height (Z Plane): %d units. (usage: /ac zplane [5-100])', ctrl.hunter_z_plane or 15))
+            print(string.format('\ag[MCAC]\ax Current Hunter Floor Height (Z Plane): %d units. (usage: /ac zplane [5-1000])', ctrl.hunter_z_plane or 15))
         end
     elseif cmd == 'pullhp' or cmd == 'minhp' then
         local val = tonumber(args[2])

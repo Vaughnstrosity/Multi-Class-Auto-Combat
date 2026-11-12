@@ -6,7 +6,7 @@ history of every change stays in [CHANGELOG.md](CHANGELOG.md).
 
 ## 3.6.2
 
-Cure and buff fixes merged from upstream Triune AutoCombat 3.5 (dtarjeft): ordered friendly heals, cures and group buffs now use each group member's real buff and affliction state (Box Network reports first, then cached buffs, then a short inspection) and target the right member, emergency heals still go first, and your previous target is restored afterwards. **Update on every box:** the Box Network plugin reports buffs, songs and curse/poison/disease/corruption counters more accurately and boxes running older versions fall back to the old behaviour. Upstream's navmeshes and unrelated changes (four-class support, plugin API, log folder) are not included.
+Cure and buff fixes merged from upstream Triune AutoCombat 3.5 (dtarjeft): ordered friendly heals, cures and group buffs now use each group member's real buff and affliction state (Box Network reports first, then cached buffs, then a short inspection) and target the right member, emergency heals still go first, and your previous target is restored afterwards. **Update on every box:** the Box Network plugin reports buffs, songs and curse/poison/disease/corruption counters more accurately and boxes running older versions fall back to the old behaviour. Upstream's navmeshes and unrelated changes (four-class support, plugin API, log folder) are not included. Also new: **shift+click any slider to type an exact value**, and Floor Height / Max Height Diff sliders now go up to 1000.
 
 ## 3.6.1
 

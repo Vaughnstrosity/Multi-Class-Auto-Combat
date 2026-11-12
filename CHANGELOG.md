@@ -2,6 +2,8 @@
 
 ## 2026-11-12
 
+- **3.6.2 -- Shift+click any slider to type a value.** Every slider in MCAC and its plugins (core `ImGui.SliderInt` / `SliderFloat` are wrapped once at startup) turns into a text box on shift+click: type the number and press Enter (clamped to the slider's range); click away to cancel. Ctrl+click keeps working. **Floor Height (Z Plane) and Max Height Diff (Z) now go up to 1000** (were 50 and 300), and `/ac zplane` / `/ac huntz` accept up to 1000.
+
 - **3.6.2 -- Cure and buff fixes merged from upstream Triune AutoCombat 3.5 (dtarjeft's cure/Box Network work).** Ordered friendly selectors (heals, cures, missing-buff and group buffs) use each recipient's actual state: fresh Box Network reports first, then cached group buffs/afflictions, then a short target inspection (0.5 s) that restores your previous target and is retried after 3 s on failure. Affliction detection covers poison, disease, curse and corruption via counters and cached buff SPAs; AA and clickie effects resolve to their real spell for range, cure and buff checks (`runtime.actionSpell`); idle off-bar buffs can be inspected before downtime memorization; emergency HP heals preempt inspections and group rez targeting may select a corpse explicitly. `boxnet.lua` reports the full buff and song arrays (sparse slots, remaining seconds), each character's own affliction flags when counters read zero, unknown versus clean, and expires data by heartbeat age. Not taken from upstream 3.5: its navmeshes, four-class support, plugin API/target selectors/spell-record revisions and the `Logs/TAC/` move.
 
 ## 2026-11-11
