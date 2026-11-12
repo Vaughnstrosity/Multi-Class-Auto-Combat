@@ -4,6 +4,10 @@ Short, human-readable notes for each release. The GitHub release page is built
 from the entry that matches the tag (`v3.0` -> `## 3.0`). The full, detailed
 history of every change stays in [CHANGELOG.md](CHANGELOG.md).
 
+## 3.6.2
+
+Cure and buff fixes merged from upstream Triune AutoCombat 3.5 (dtarjeft): ordered friendly heals, cures and group buffs now use each group member's real buff and affliction state (Box Network reports first, then cached buffs, then a short inspection) and target the right member, emergency heals still go first, and your previous target is restored afterwards. **Update on every box:** the Box Network plugin reports buffs, songs and curse/poison/disease/corruption counters more accurately and boxes running older versions fall back to the old behaviour. Upstream's navmeshes and unrelated changes (four-class support, plugin API, log folder) are not included.
+
 ## 3.6.1
 
 Bug-fix release. **Settings now really are kept per server:** 3.6.0 read a server-name member that does not exist, so every file was still keyed by character name only. MCAC now reads the real server name and prints it at login; your existing files are copied to the server-tagged names on first start (nothing is deleted). **Cast While Moving** is now honoured by the main combat loop, which used to halt movement for every cast, and it turns off MQ2MoveUtils' AutoPause (which paused movement for self/group heals). Walking back to a mob after a knockback or summon restarts promptly instead of stalling, and Debug Diagnostic Logging adds `[MOVE]` lines explaining why movement stopped.

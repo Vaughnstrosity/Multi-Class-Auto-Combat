@@ -1,5 +1,9 @@
 # MCAC Change Log
 
+## 2026-11-12
+
+- **3.6.2 -- Cure and buff fixes merged from upstream Triune AutoCombat 3.5 (dtarjeft's cure/Box Network work).** Ordered friendly selectors (heals, cures, missing-buff and group buffs) use each recipient's actual state: fresh Box Network reports first, then cached group buffs/afflictions, then a short target inspection (0.5 s) that restores your previous target and is retried after 3 s on failure. Affliction detection covers poison, disease, curse and corruption via counters and cached buff SPAs; AA and clickie effects resolve to their real spell for range, cure and buff checks (`runtime.actionSpell`); idle off-bar buffs can be inspected before downtime memorization; emergency HP heals preempt inspections and group rez targeting may select a corpse explicitly. `boxnet.lua` reports the full buff and song arrays (sparse slots, remaining seconds), each character's own affliction flags when counters read zero, unknown versus clean, and expires data by heartbeat age. Not taken from upstream 3.5: its navmeshes, four-class support, plugin API/target selectors/spell-record revisions and the `Logs/TAC/` move.
+
 ## 2026-11-11
 
 - **3.6.1 -- Per-server settings actually separate servers now.** 3.6.0 asked MacroQuest for `EverQuest.ServerName` / `Zone.Server`, neither of which exists, so the server was always blank and files stayed keyed by character name. MCAC now reads `EverQuest.Server` (fallback `MacroQuest.Server`) and prints `Settings: server "...", character "..."` at login. On first start on a known server the loadout is copied from `mcac_loadout__<Name>.lua` (what 3.6.0 wrote) or `mcac_loadout_<Name>.lua`, and chat/DPS/chat-history files from their `_unknown_` (3.6.0) or name-only copies; originals are left in place.
