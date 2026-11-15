@@ -4,6 +4,10 @@ Short, human-readable notes for each release. The GitHub release page is built
 from the entry that matches the tag (`v3.0` -> `## 3.0`). The full, detailed
 history of every change stays in [CHANGELOG.md](CHANGELOG.md).
 
+## 3.6.4
+
+Bug-fix release. Running back to a mob after a knockback or summon no longer stops every few steps: MCAC's "Target too far away -- repositioning closer" handler used to cancel and restart the run each time EverQuest repeated its range message, and sometimes cancelled it without restarting. A repeated message now leaves a run that is already heading for the mob alone.
+
 ## 3.6.3
 
 Two new settings. **Passthrough Targeting** (off by default) is for servers where a beneficial single-target spell cast while a hostile NPC is targeted lands on that NPC's target: when the intended recipient is the mob's target (needs the Target of Target window), MCAC casts without switching targets. **Retarget After Cast Starts** (on by default) puts your previous target back as soon as the cast bar is up instead of holding the spell's target for the whole cast; turn it off if your server applies the spell to the target at the end of the cast.

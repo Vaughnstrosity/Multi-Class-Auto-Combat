@@ -61,7 +61,7 @@ do
         end
     end)
 end
-local VERSION           = '3.6.3'
+local VERSION           = '3.6.4'
 local open              = true
 -- File-backed diagnostic logger. Hooked into print() right away so every
 -- chat line from here on (core and plugins) is captured in its ring buffer;
@@ -21411,15 +21411,22 @@ local function repositionCloser()
     if not (tgt() and tgt.Type() == 'NPC' and not tgt.Dead()) then return end
     local tid = tgt.ID()
     if not ctrl.running then return end
+    -- EQ repeats "too far away" on every attack round while auto-attack is on
+    -- and the mob is out of reach -- including while we are already running
+    -- back. Never tear down a run that is already heading for this target, and
+    -- check the throttle BEFORE stopping anything: stopping first and then
+    -- returning on the throttle left the character standing still until the
+    -- combat loop restarted the run (a few steps, stop, a few steps ...).
     if isMoveActive() then
         if pursuit.lastNavTargetId == tid or
             tostring(pursuit.lastNavTargetId) == ('native_spawn_' .. tostring(tid)) then
+            if runtime.moveDebug then runtime.moveDebug('too far: already closing in', 'left running') end
             return
         end
-        stopMoving()
     end
     if (os.clock() - pursuit.lastTooFarRepositionAt) < 1.0 then return end
     pursuit.lastTooFarRepositionAt = os.clock()
+    if isMoveActive() then stopMoving() end
 
     local currentDist = distToId(tid)
     if runtime.moveDebug then runtime.moveDebug('repositionCloser', string.format('d=%.1f navActive=%s', currentDist, tostring(isMoveActive()))) end
@@ -21435,7 +21442,8 @@ local function repositionCloser()
         '\ay[MCAC]\ax Target too far away (dist %.1f) -- repositioning closer (%d units) on target #%d.', currentDist,
         targetDist, tid))
 
-    -- Reset navigation target cache so moveToward/reposition issues a fresh movement command
+    -- Reset navigation target cache, then record the run issued below so the
+    -- next "too far" message and the combat loop's re-close both see it.
     pursuit.lastNavTargetId = 0
     pursuit.lastStickDist = 0
     if runtime.clearDetour then runtime.clearDetour() end
@@ -21447,6 +21455,7 @@ local function repositionCloser()
         pcall(function() hasPath = mq.TLO.Navigation.PathExists('id ' .. tid)() end)
         if hasPath then
             mq.cmdf('/nav id %d distance=%d', tid, targetDist)
+            pursuit.lastNavTargetId = tid
             return
         end
     end
@@ -21454,6 +21463,8 @@ local function repositionCloser()
     if stickLoaded() then
         local behindMod = (ctrl.mode == 'Assist' and ctrl.assist_behind ~= false and not runtime.playerHasAggro(tid)) and ' behind' or ''
         mq.cmdf('/stick id %d %d%s', tid, targetDist, behindMod)
+        pursuit.lastNavTargetId = tid
+        pursuit.lastStickDist = targetDist
     else
         mq.cmd('/keypress forward hold')
         mq.delay(200)
