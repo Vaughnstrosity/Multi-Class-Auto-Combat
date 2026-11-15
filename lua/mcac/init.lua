@@ -61,7 +61,7 @@ do
         end
     end)
 end
-local VERSION           = '3.6.4'
+local VERSION           = '3.6.5'
 local open              = true
 -- File-backed diagnostic logger. Hooked into print() right away so every
 -- chat line from here on (core and plugins) is captured in its ring buffer;
@@ -462,7 +462,7 @@ local function defaultCtrl()
         pet_hold_enabled         = true,
         cast_while_moving        = false,
         passthrough_targeting    = false,
-        retarget_after_cast_start = true,
+        retarget_after_cast_start = false,
         pet_names              = {},   -- cls -> pet name learned from that class's last summon (pet names are unique per player on this server)
         pet_names_manual         = {},   -- cls -> pet name the player typed in (Settings -> Pet Names); authoritative: the class's pet is looked up by this name
         show_crit_floaters       = true,
@@ -3966,14 +3966,18 @@ runtime.castThroughHostileTarget = castThroughHostileTarget
 -- The spell target only has to be selected while the cast begins. Once the
 -- cast bar is really up (Me.Casting set, a short settle time after /cast), put
 -- the previous target back instead of holding the recipient for the whole cast.
--- Returns true when the previous target was restored on this call.
+-- Opt-in (Settings -> Retarget After Cast Starts). It only ever acts for a cast
+-- that itself switched targets (castTracker.releaseTargetId, set by the cast
+-- that switched, never a leftover runtime.restoreTargetId) and never for
+-- detrimental casts. Returns true when the previous target was restored.
 function runtime.releaseTargetAfterCastStart()
-    if not ctrl or ctrl.retarget_after_cast_start == false then return false end
-    if castTracker.targetReleased == true or runtime.restoreTargetId == nil then return false end
+    if not ctrl or ctrl.retarget_after_cast_start ~= true then return false end
+    if castTracker.targetReleased == true or castTracker.releaseTargetId == nil then return false end
     if not castTracker.activeSpell or castTracker.failed then return false end
     if not isCasting() then return false end
     if (os.clock() - (tonumber(castTracker.castStartTime) or 0)) < 0.3 then return false end
-    local rId = runtime.restoreTargetId
+    local rId = castTracker.releaseTargetId
+    local reattack = castTracker.releaseAttack == true
     runtime.restoreTargetId = nil
     castTracker.targetReleased = true
     castTracker.targetRequired = false
@@ -3983,6 +3987,12 @@ function runtime.releaseTargetAfterCastStart()
     end
     if rId > 0 then
         if isSpawnAlive(rId) and (mq.TLO.Target.ID() or 0) ~= rId then runtime.setTarget(rId) end
+        -- changing to a friendly target can drop auto-attack; resume it on the
+        -- hostile target we are going back to
+        if reattack and (mq.TLO.Target.ID() or 0) == rId and not mq.TLO.Me.Combat()
+            and runtime.isHostileTarget and runtime.isHostileTarget(rId) then
+            mq.cmd('/attack on')
+        end
     elseif (mq.TLO.Target.ID() or 0) > 0 then
         runtime.clearTarget()
     end
@@ -3997,6 +4007,7 @@ function runtime.abortPendingCast(orig, id, keepHostile)
     castTracker.activeSpell    = nil
     castTracker.activeTargetId = nil
     castTracker.targetReleased = false
+    castTracker.releaseTargetId = nil
     castTracker.activeKind     = nil
     castTracker.targetRequired = nil
     castTracker.castStartTime  = 0
@@ -15243,13 +15254,13 @@ function UI.drawSettingsTab()
             UI.setTooltip('For servers where a beneficial single-target spell cast while a hostile NPC is targeted lands on that NPC\'s target. When enabled and the spell\'s intended recipient is already the hostile target\'s target (Me.TargetOfTarget, which needs the Target of Target window), MCAC casts without switching targets. Leave it off on servers without passthrough, or the spell will fail.')
         end
 
-        local rtVal = ImGui.Checkbox('Retarget After Cast Starts##retargetAfterCastStart', ctrl.retarget_after_cast_start ~= false)
-        if rtVal ~= (ctrl.retarget_after_cast_start ~= false) then
+        local rtVal = ImGui.Checkbox('Retarget After Cast Starts##retargetAfterCastStart', ctrl.retarget_after_cast_start == true)
+        if rtVal ~= (ctrl.retarget_after_cast_start == true) then
             ctrl.retarget_after_cast_start = rtVal
             runtime.saveLoadout(true)
         end
         if ImGui.IsItemHovered() then
-            UI.setTooltip('When MCAC has to switch targets to cast a spell, it restores your previous target as soon as the cast bar is up instead of holding the spell target for the whole cast. Turn this off if a spell fizzles or lands on the wrong target when you change target mid-cast.')
+            UI.setTooltip('Off by default. When MCAC has to switch targets to cast a non-detrimental spell, it restores your previous target as soon as the cast bar is up instead of holding the spell target for the whole cast, and resumes auto-attack if the switch dropped it. Only for servers that lock the spell target when the cast begins; if spells fizzle, land on the wrong target or attacks stop, leave it off.')
         end
     end
 
@@ -19474,6 +19485,7 @@ function runtime.castGem(i, g, id)
     castTracker.activeSpell    = g.spell
     castTracker.activeTargetId = id
     castTracker.targetReleased = false
+    castTracker.releaseTargetId = nil
     castTracker.activeKind     = g.kind
     if keepHostile then
         castTracker.targetRequired = false
@@ -19556,6 +19568,8 @@ function runtime.castGem(i, g, id)
         if g.cls ~= 'Brd' then
             -- Spell has a cast time: keep target on ally until cast finishes, then restore combat target!
             runtime.restoreTargetId = orig
+            castTracker.releaseTargetId = (not isDet) and orig or nil
+            castTracker.releaseAttack = wasAttacking == true
         elseif orig > 0 then
             mq.cmdf('/timed 1 /target id %d', orig)
         else
@@ -19635,6 +19649,7 @@ function runtime.fireAA(name, a, id)
     castTracker.activeSpell    = name
     castTracker.activeTargetId = id
     castTracker.targetReleased = false
+    castTracker.releaseTargetId = nil
     castTracker.activeKind     = a and a.kind
     if keepHostile then
         castTracker.targetRequired = false
@@ -19670,6 +19685,8 @@ function runtime.fireAA(name, a, id)
     if orig ~= id and not keepHostile then
         if castMs > 0 then
             runtime.restoreTargetId = orig
+            castTracker.releaseTargetId = (not isDet) and orig or nil
+            castTracker.releaseAttack = wasAttacking == true
         else
             mq.delay(60)
             if orig > 0 and mq.TLO.Target.ID() ~= orig then
@@ -20144,6 +20161,7 @@ runtime.useClickie = function(c, id)
     castTracker.activeSpell    = effName
     castTracker.activeTargetId = id
     castTracker.targetReleased = false
+    castTracker.releaseTargetId = nil
     castTracker.activeKind     = c.kind
     if keepHostile then
         castTracker.targetRequired = false
@@ -20212,6 +20230,8 @@ runtime.useClickie = function(c, id)
     if orig ~= id and not keepHostile then
         if castMs > 0 then
             runtime.restoreTargetId = orig
+            castTracker.releaseTargetId = (not isDet) and orig or nil
+            castTracker.releaseAttack = wasAttacking == true
         else
             mq.delay(60)
             if orig > 0 and mq.TLO.Target.ID() ~= orig then
@@ -24664,6 +24684,7 @@ local function combatTick()
         castTracker.activeSpell    = nil
         castTracker.activeTargetId = nil
         castTracker.targetReleased = false
+        castTracker.releaseTargetId = nil
         castTracker.activeKind     = nil
         castTracker.targetRequired = nil
         clearCursor()

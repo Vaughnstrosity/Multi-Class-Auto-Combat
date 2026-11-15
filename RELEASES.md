@@ -4,6 +4,10 @@ Short, human-readable notes for each release. The GitHub release page is built
 from the entry that matches the tag (`v3.0` -> `## 3.0`). The full, detailed
 history of every change stays in [CHANGELOG.md](CHANGELOG.md).
 
+## 3.6.5
+
+Bug-fix release. **Retarget After Cast Starts** (new in 3.6.3) could leave MCAC not targeting or not attacking, so it is now **off by default** and safer when enabled (it only acts for casts that switched your target, never for detrimental spells, and resumes auto-attack afterwards). If you ran 3.6.3 or 3.6.4, the setting was saved as on: untick it in Settings -> Combat Style & Positioning.
+
 ## 3.6.4
 
 Bug-fix release. Running back to a mob after a knockback or summon no longer stops every few steps: MCAC's "Target too far away -- repositioning closer" handler used to cancel and restart the run each time EverQuest repeated its range message, and sometimes cancelled it without restarting. A repeated message now leaves a run that is already heading for the mob alone.

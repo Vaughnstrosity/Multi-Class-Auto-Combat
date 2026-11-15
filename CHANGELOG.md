@@ -1,5 +1,9 @@
 # MCAC Change Log
 
+## 2026-11-15
+
+- **3.6.5 -- Fix: Retarget After Cast Starts could stop MCAC targeting or attacking, so it is now off by default.** The 3.6.3 setting restored your previous target as soon as the cast bar was up. It could act on a leftover target id from an earlier cast, and it left auto-attack off after the target had been switched to an ally. It is now opt-in (Settings -> Combat Style & Positioning), only acts for a cast that itself switched targets, never for detrimental casts, and sends `/attack on` after going back to a hostile target if combat dropped. **Characters that ran 3.6.3 or 3.6.4 have the setting saved as on: untick it unless you want it.**
+
 ## 2026-11-14
 
 - **3.6.4 -- Fix: running back to a mob after a knockback or summon no longer stutters.** EQ repeats "Your target is too far away" on every attack round while auto-attack is on and the mob is out of reach, including while you are already running back. The handler (`repositionCloser`) never recorded the `/nav` / `/stick` run it started, so the next message looked like a new problem; it also called `stopMoving()` before its 1 s throttle and then returned, leaving the character standing still until the combat loop restarted the run (a few steps, stop, repeat, with the "Target too far away" text each time). A repeated message now leaves a run that is already heading for the target alone (silently), the throttle is checked before anything is stopped, and the run it issues is recorded. With Debug Diagnostic Logging on, `[MOVE] too far: already closing in` marks the ignored messages.
