@@ -61,7 +61,7 @@ do
         end
     end)
 end
-local VERSION           = '3.6.5'
+local VERSION           = '3.7.0'
 local open              = true
 -- File-backed diagnostic logger. Hooked into print() right away so every
 -- chat line from here on (core and plugins) is captured in its ring buffer;
@@ -3607,9 +3607,15 @@ local function createCastTracker()
         local tid = tonumber(targetId)
 
         -- 1. Target Immunity check (permanent for this spawn)
+        -- A spell/AA/clickie flagged "Immune OK" (ignore_immune) is never held
+        -- back by an immunity: the mob may resist only one of its effects.
+        -- (looked up only when an immunity actually applies: this runs per gem per tick)
+        local function ignoreImm()
+            return runtime and runtime.ignoresImmunity and runtime.ignoresImmunity(spellName) or false
+        end
         if tid and tid > 0 and targetImmunities[tid] then
             local imm = spawnEntry(targetImmunities, tid, false)
-            if imm and imm[spellName] then return true, 'Immune', 9999 end
+            if imm and imm[spellName] and not ignoreImm() then return true, 'Immune', 9999 end
         end
 
         -- 1b. Known immunity from the Game Database plugin (NPC special
@@ -3622,7 +3628,9 @@ local function createCastTracker()
             if checked[spellName] == nil then
                 local ok, why = pcall(tracker.knownImmunity, spellName, tid, kind)
                 checked[spellName] = (ok and why) or false
-                if ok and why then
+                if ok and why and ignoreImm() then
+                    checked[spellName] = false -- flagged "Immune OK": cast it anyway
+                elseif ok and why then
                     spawnEntry(targetImmunities, tid, true)[spellName] = true
                     local tName = 'Target'
                     pcall(function()
@@ -3698,7 +3706,21 @@ local function createCastTracker()
 
         local rLow = tostring(r):lower()
 
-        if rLow == 'target immune' or rLow == 'immune' then
+        if (rLow == 'target immune' or rLow == 'immune')
+            and runtime and runtime.ignoresImmunity and runtime.ignoresImmunity(spellName) then
+            -- Flagged "Immune OK": the mob is often immune to only one effect of
+            -- the spell, so register nothing and keep casting it.
+            resetFailCount(spellName)
+            if tid and tid > 0 then
+                local imm = spawnEntry(targetImmunities, tid, false)
+                if imm then imm[spellName] = nil end
+            end
+            if ctrl and ctrl.debug_mode then
+                print(string.format('\ao[DEBUG cast]\ax "%s" reported immunity on #%s -- Immune OK is set, not registering it.',
+                    tostring(spellName), tostring(tid)))
+            end
+
+        elseif rLow == 'target immune' or rLow == 'immune' then
             -- Mob Immunity: Record permanently for this target ID (0 retries wasted). Does NOT lock globally.
             if tid and tid > 0 then
                 spawnEntry(targetImmunities, tid, true)[spellName] = true
@@ -6905,7 +6927,9 @@ local function loadoutSig()
                     '~' ..
                     tostring(g.boss_only) ..
                     '~' ..
-                    tostring(g.keep_singing)
+                    tostring(g.keep_singing) ..
+                    '~' ..
+                    tostring(g.ignore_immune)
             end
         end
     end
@@ -6919,7 +6943,7 @@ local function loadoutSig()
                 '~' ..
                 tostring(a.enabled) .. '~' .. tostring(a.target) .. '~' .. tostring(a.when) .. '~' .. tostring(a.pct)
                 .. '~' .. tostring(a.boss_only) .. '~' .. tostring(a.burn_only) .. '~' .. tostring(a.priority)
-                .. '~' .. tostring(a.min_xtar) .. '~' .. tostring(a.excl)
+                .. '~' .. tostring(a.min_xtar) .. '~' .. tostring(a.excl) .. '~' .. tostring(a.ignore_immune)
         end
     end
     local dkeys = {}
@@ -6953,7 +6977,7 @@ local function loadoutSig()
         for i, c in ipairs(loadout.clickies) do
             if type(c) == 'table' then
                 p[#p + 1] = 'clk' .. tostring(i) .. '~' .. tostring(c.name) .. '~' .. tostring(c.enabled) .. '~' .. tostring(c.target)
-                    .. '~' .. tostring(c.when) .. '~' .. tostring(c.pct) .. '~' .. tostring(c.min_xtar) .. '~' .. tostring(c.burn_only)
+                    .. '~' .. tostring(c.when) .. '~' .. tostring(c.pct) .. '~' .. tostring(c.min_xtar) .. '~' .. tostring(c.burn_only) .. '~' .. tostring(c.ignore_immune)
             end
         end
     end
@@ -7121,6 +7145,11 @@ end
 
 function UI.accent(c, txt) ImGui.TextColored(c[1], c[2], c[3], c[4], txt) end
 local accent = UI.accent
+UI.IMMUNE_OK_TIP = 'Immune OK: keep casting this even after the mob reports it is immune. '
+    .. 'That message appears when the mob resists only one effect of the spell, '
+    .. 'so the other effects may still be worth casting. Off: MCAC stops casting '
+    .. 'it on that mob after the first immunity message.'
+
 function UI.setTooltip(fmt, ...)
     if fmt == nil then return end
     local text
@@ -10073,6 +10102,16 @@ function UI.drawGemList(gemsTable, idPrefix, isActiveSet, allowBurn)
                         if ImGui.IsItemHovered() then
                             ImGui.SetTooltip('Only cast when Burn Mode is ON.')
                         end
+
+                        ImGui.SameLine()
+                        local giiVal = ImGui.Checkbox('Imm OK##gii', g.ignore_immune == true)
+                        if giiVal ~= (g.ignore_immune == true) then
+                            g.ignore_immune = giiVal
+                            runtime.saveLoadout(true)
+                        end
+                        if ImGui.IsItemHovered() then
+                            ImGui.SetTooltip(UI.IMMUNE_OK_TIP)
+                        end
                     end
                 end
 
@@ -10448,6 +10487,12 @@ function UI.drawClickieTab()
                 if ImGui.IsItemHovered() then
                     UI.setTooltip('Only use this clickie when Burn Mode is ON.')
                 end
+
+                ImGui.SameLine()
+                c.ignore_immune = ImGui.Checkbox('Imm OK##cii', c.ignore_immune == true) or nil
+                if ImGui.IsItemHovered() then
+                    UI.setTooltip(UI.IMMUNE_OK_TIP)
+                end
             end
 
             ImGui.PopID()
@@ -10817,6 +10862,11 @@ function UI.drawAATab()
                                     entry.burn_only = aaboVal
                                     if ImGui.IsItemHovered() then
                                         ImGui.SetTooltip('Only fire this AA when Burn Mode is ON.')
+                                    end
+                                    ImGui.SameLine()
+                                    entry.ignore_immune = ImGui.Checkbox('Imm OK##aaii', entry.ignore_immune == true) or nil
+                                    if ImGui.IsItemHovered() then
+                                        ImGui.SetTooltip(UI.IMMUNE_OK_TIP)
                                     end
                                     ImGui.SameLine(); ImGui.SetNextItemWidth(UI.px(38))
                                     local exOpts = runtime.AA_EXCL_GROUPS
@@ -17493,6 +17543,37 @@ function runtime.castPassesThrough(id, hostileTarget, spell)
         print(string.format('\ao[DEBUG cast]\ax Passthrough: casting through hostile target to #%d', id))
     end
     return true
+end
+
+-- "Immune OK" (ignore_immune) on a spell line, AA or clickie: keep casting it
+-- even when the mob reports immunity, since that message fires when the mob is
+-- immune to only one effect of the spell. Matches by spell/AA/click name, plus
+-- the underlying spell name of an AA or clickie (failure messages report that).
+function runtime.ignoresImmunity(name)
+    if not name or name == '' or not loadout then return false end
+    local want = tostring(name):lower()
+    local function hit(n) return n ~= nil and n ~= '' and tostring(n):lower() == want end
+    local function viaSpell(entryName, entry)
+        local spName = nil
+        pcall(function()
+            local sp = runtime.actionSpell(entryName, entry)
+            if sp then spName = sp.Name() end
+        end)
+        return hit(spName)
+    end
+    for _, g in ipairs(loadout.gems or {}) do
+        if type(g) == 'table' and g.ignore_immune == true and hit(g.spell) then return true end
+    end
+    for aaName, a in pairs(loadout.aas or {}) do
+        if type(a) == 'table' and a.ignore_immune == true and (hit(aaName) or viaSpell(aaName, a)) then return true end
+    end
+    for _, c in ipairs(loadout.clickies or {}) do
+        if type(c) == 'table' and c.ignore_immune == true then
+            local eff = (c.spell and c.spell ~= '') and c.spell or c.name
+            if hit(c.name) or hit(c.spell) or viaSpell(eff, c) then return true end
+        end
+    end
+    return false
 end
 
 function runtime.actionSpell(name, entry)

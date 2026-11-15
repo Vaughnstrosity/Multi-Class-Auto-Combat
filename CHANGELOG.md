@@ -2,6 +2,8 @@
 
 ## 2026-11-15
 
+- **3.7.0 -- New: "Imm OK" checkbox on spell lines, AAs and clickies (keep casting when the mob reports immunity).** The "Your target is immune to ..." message also fires when a mob is immune to only one effect of a spell, and MCAC used to block that spell on that mob for good. With Imm OK ticked (next to Boss / Burn, saved per character, off by default) the immunity is neither recorded nor enforced, a Game Database immunity is ignored for that entry, and ticking it lifts an immunity already recorded on the mob. Matches by spell, AA or click name and by the underlying spell name of an AA or clickie (`runtime.ignoresImmunity`). When the spell is recast is still decided by the usual conditions, per-mob cast limit and already-applied checks. Discs and skills never register immunity, so they have no checkbox.
+
 - **3.6.5 -- Fix: Retarget After Cast Starts could stop MCAC targeting or attacking, so it is now off by default.** The 3.6.3 setting restored your previous target as soon as the cast bar was up. It could act on a leftover target id from an earlier cast, and it left auto-attack off after the target had been switched to an ally. It is now opt-in (Settings -> Combat Style & Positioning), only acts for a cast that itself switched targets, never for detrimental casts, and sends `/attack on` after going back to a hostile target if combat dropped. **Characters that ran 3.6.3 or 3.6.4 have the setting saved as on: untick it unless you want it.**
 
 ## 2026-11-14
