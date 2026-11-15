@@ -61,7 +61,7 @@ do
         end
     end)
 end
-local VERSION           = '3.6.2'
+local VERSION           = '3.6.3'
 local open              = true
 -- File-backed diagnostic logger. Hooked into print() right away so every
 -- chat line from here on (core and plugins) is captured in its ring buffer;
@@ -461,7 +461,9 @@ local function defaultCtrl()
         pet_assist_at            = 100,
         pet_hold_enabled         = true,
         cast_while_moving        = false,
-        pet_names                = {},   -- cls -> pet name learned from that class's last summon (pet names are unique per player on this server)
+        passthrough_targeting    = false,
+        retarget_after_cast_start = true,
+        pet_names              = {},   -- cls -> pet name learned from that class's last summon (pet names are unique per player on this server)
         pet_names_manual         = {},   -- cls -> pet name the player typed in (Settings -> Pet Names); authoritative: the class's pet is looked up by this name
         show_crit_floaters       = true,
         show_cooldowns           = false,
@@ -3952,10 +3954,40 @@ runtime.isCastingOrStarting = isCastingOrStarting
 -- Only single-target HP heals can redirect from a hostile target to the
 -- caster. Heal-priority eligibility also includes cures and is not proof
 -- that retargeting can be skipped.
-local function castThroughHostileTarget(selfCast, hostileTarget, redirectableHeal)
-    return selfCast == true and hostileTarget == true and redirectableHeal == true
+-- `passthrough` (runtime.castPassesThrough) is the Passthrough Targeting
+-- result: the hostile target's own target is the intended recipient.
+local function castThroughHostileTarget(selfCast, hostileTarget, redirectableHeal, passthrough)
+    if hostileTarget ~= true then return false end
+    if passthrough == true then return true end
+    return selfCast == true and redirectableHeal == true
 end
 runtime.castThroughHostileTarget = castThroughHostileTarget
+
+-- The spell target only has to be selected while the cast begins. Once the
+-- cast bar is really up (Me.Casting set, a short settle time after /cast), put
+-- the previous target back instead of holding the recipient for the whole cast.
+-- Returns true when the previous target was restored on this call.
+function runtime.releaseTargetAfterCastStart()
+    if not ctrl or ctrl.retarget_after_cast_start == false then return false end
+    if castTracker.targetReleased == true or runtime.restoreTargetId == nil then return false end
+    if not castTracker.activeSpell or castTracker.failed then return false end
+    if not isCasting() then return false end
+    if (os.clock() - (tonumber(castTracker.castStartTime) or 0)) < 0.3 then return false end
+    local rId = runtime.restoreTargetId
+    runtime.restoreTargetId = nil
+    castTracker.targetReleased = true
+    castTracker.targetRequired = false
+    if ctrl.debug_mode then
+        print(string.format('\ao[DEBUG cast]\ax Cast of "%s" has begun -- restoring previous target #%d',
+            tostring(castTracker.activeSpell), rId))
+    end
+    if rId > 0 then
+        if isSpawnAlive(rId) and (mq.TLO.Target.ID() or 0) ~= rId then runtime.setTarget(rId) end
+    elseif (mq.TLO.Target.ID() or 0) > 0 then
+        runtime.clearTarget()
+    end
+    return true
+end
 
 -- A cast/AA/clickie was set up (target switched, castTracker armed) but never
 -- fired -- e.g. the character was still moving. Undo the bookkeeping so
@@ -3964,6 +3996,7 @@ runtime.castThroughHostileTarget = castThroughHostileTarget
 function runtime.abortPendingCast(orig, id, keepHostile)
     castTracker.activeSpell    = nil
     castTracker.activeTargetId = nil
+    castTracker.targetReleased = false
     castTracker.activeKind     = nil
     castTracker.targetRequired = nil
     castTracker.castStartTime  = 0
@@ -3980,6 +4013,8 @@ end
 
 local function getActiveTargetRequiredCastingId()
     if not isCastingOrStarting() then return nil end
+    -- The cast has begun and the previous target was already restored.
+    if castTracker and castTracker.targetReleased == true then return nil end
 
     if castTracker and castTracker.targetRequired and castTracker.activeTargetId and castTracker.activeTargetId > 0 then
         return castTracker.activeTargetId
@@ -15198,6 +15233,24 @@ function UI.drawSettingsTab()
         if ImGui.IsItemHovered() then
             UI.setTooltip('For servers that allow casting spells while moving. When enabled, MCAC no longer checks whether you are moving before casting spells, AAs and clickies: it does not stop navigation, stick or movement keys first and never aborts a cast because you are in motion. Leave it off on servers where movement interrupts casting.')
         end
+
+        local ptVal = ImGui.Checkbox('Passthrough Targeting##passthroughTargeting', ctrl.passthrough_targeting == true)
+        if ptVal ~= (ctrl.passthrough_targeting == true) then
+            ctrl.passthrough_targeting = ptVal
+            runtime.saveLoadout(true)
+        end
+        if ImGui.IsItemHovered() then
+            UI.setTooltip('For servers where a beneficial single-target spell cast while a hostile NPC is targeted lands on that NPC\'s target. When enabled and the spell\'s intended recipient is already the hostile target\'s target (Me.TargetOfTarget, which needs the Target of Target window), MCAC casts without switching targets. Leave it off on servers without passthrough, or the spell will fail.')
+        end
+
+        local rtVal = ImGui.Checkbox('Retarget After Cast Starts##retargetAfterCastStart', ctrl.retarget_after_cast_start ~= false)
+        if rtVal ~= (ctrl.retarget_after_cast_start ~= false) then
+            ctrl.retarget_after_cast_start = rtVal
+            runtime.saveLoadout(true)
+        end
+        if ImGui.IsItemHovered() then
+            UI.setTooltip('When MCAC has to switch targets to cast a spell, it restores your previous target as soon as the cast bar is up instead of holding the spell target for the whole cast. Turn this off if a spell fizzles or lands on the wrong target when you change target mid-cast.')
+        end
     end
 
     if ImGui.CollapsingHeader('Group Resurrection', ImGuiTreeNodeFlags.None) then
@@ -17408,6 +17461,29 @@ function runtime.isRedirectableHeal(name, entry, spell)
         or checkHasSPA(spell, nil, nil, 147)
 end
 
+-- Passthrough Targeting: on servers where a beneficial single-target spell cast
+-- while a hostile NPC is targeted lands on that NPC's target, skip the retarget
+-- when the intended recipient already IS the hostile target's target.
+-- Me.TargetOfTarget is NULL unless the Target of Target window is active, in
+-- which case this simply never applies and the normal retarget runs.
+function runtime.castPassesThrough(id, hostileTarget, spell)
+    if not ctrl or ctrl.passthrough_targeting ~= true or hostileTarget ~= true then return false end
+    id = tonumber(id) or 0
+    if id <= 0 then return false end
+    local totId = 0
+    pcall(function() totId = mq.TLO.Me.TargetOfTarget.ID() or 0 end)
+    if totId ~= id then return false end
+    local ok, beneficial, targetType = pcall(function()
+        if not spell or not spell() then return false end
+        return spell.Beneficial() == true, tostring(spell.TargetType() or ''):lower()
+    end)
+    if not ok or not beneficial or targetType ~= 'single' then return false end
+    if ctrl.debug_mode then
+        print(string.format('\ao[DEBUG cast]\ax Passthrough: casting through hostile target to #%d', id))
+    end
+    return true
+end
+
 function runtime.actionSpell(name, entry)
     local aaName = nil
     if entry and loadout then
@@ -19380,7 +19456,8 @@ function runtime.castGem(i, g, id)
     local orig = mq.TLO.Target.ID() or 0
     local wasAttacking = mq.TLO.Me.Combat()
     local hostileTarget = (orig > 0 and isHostileTarget and isHostileTarget(orig)) == true
-    local keepHostile = castThroughHostileTarget(selfCast, hostileTarget, runtime.isRedirectableHeal(g.spell, g, sp))
+    local keepHostile = castThroughHostileTarget(selfCast, hostileTarget, runtime.isRedirectableHeal(g.spell, g, sp),
+        runtime.castPassesThrough and runtime.castPassesThrough(id, hostileTarget, sp))
     local needsTarget = (orig ~= id) and not keepHostile
     if needsTarget and not runtime.setTarget(id, g.when == 'ally is Dead') then return false end
 
@@ -19396,6 +19473,7 @@ function runtime.castGem(i, g, id)
     castTracker.failed         = false
     castTracker.activeSpell    = g.spell
     castTracker.activeTargetId = id
+    castTracker.targetReleased = false
     castTracker.activeKind     = g.kind
     if keepHostile then
         castTracker.targetRequired = false
@@ -19528,7 +19606,8 @@ function runtime.fireAA(name, a, id)
     local orig = mq.TLO.Target.ID() or 0
     local wasAttacking = mq.TLO.Me.Combat()
     local hostileTarget = (orig > 0 and isHostileTarget and isHostileTarget(orig)) == true
-    local keepHostile = castThroughHostileTarget(selfCast, hostileTarget, runtime.isRedirectableHeal(name, a, ok and sp or nil))
+    local keepHostile = castThroughHostileTarget(selfCast, hostileTarget, runtime.isRedirectableHeal(name, a, ok and sp or nil),
+        runtime.castPassesThrough and runtime.castPassesThrough(id, hostileTarget, ok and sp or nil))
     local needsTarget = (orig ~= id) and not keepHostile
     if needsTarget and not runtime.setTarget(id) then return false end
     clearCursor()
@@ -19555,6 +19634,7 @@ function runtime.fireAA(name, a, id)
     castTracker.failed         = false
     castTracker.activeSpell    = name
     castTracker.activeTargetId = id
+    castTracker.targetReleased = false
     castTracker.activeKind     = a and a.kind
     if keepHostile then
         castTracker.targetRequired = false
@@ -20052,7 +20132,8 @@ runtime.useClickie = function(c, id)
     local orig = mq.TLO.Target.ID() or 0
     local wasAttacking = mq.TLO.Me.Combat()
     local hostileTarget = (orig > 0 and isHostileTarget and isHostileTarget(orig)) == true
-    local keepHostile = castThroughHostileTarget(selfCast, hostileTarget, runtime.isRedirectableHeal(effName, c, sp))
+    local keepHostile = castThroughHostileTarget(selfCast, hostileTarget, runtime.isRedirectableHeal(effName, c, sp),
+        runtime.castPassesThrough and runtime.castPassesThrough(id, hostileTarget, sp))
     local needsTarget = (orig ~= id) and not keepHostile
     if needsTarget and not runtime.setTarget(id) then return false end
 
@@ -20062,6 +20143,7 @@ runtime.useClickie = function(c, id)
     castTracker.failed         = false
     castTracker.activeSpell    = effName
     castTracker.activeTargetId = id
+    castTracker.targetReleased = false
     castTracker.activeKind     = c.kind
     if keepHostile then
         castTracker.targetRequired = false
@@ -24491,6 +24573,7 @@ local function combatTick()
 
     if isCastingNow then
         castTracker.wasCasting = true
+        if runtime.releaseTargetAfterCastStart then runtime.releaseTargetAfterCastStart() end
         local reqTargetId = getActiveTargetRequiredCastingId()
         if reqTargetId and reqTargetId > 0 and (isSpawnAlive(reqTargetId)
             or (ctrl.auto_group_rez == true and runtime.isGroupRezCorpse(reqTargetId))) then
@@ -24569,6 +24652,7 @@ local function combatTick()
         castTracker.lastEndAt      = os.clock()
         castTracker.activeSpell    = nil
         castTracker.activeTargetId = nil
+        castTracker.targetReleased = false
         castTracker.activeKind     = nil
         castTracker.targetRequired = nil
         clearCursor()

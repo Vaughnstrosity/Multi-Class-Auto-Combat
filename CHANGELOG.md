@@ -1,5 +1,11 @@
 # MCAC Change Log
 
+## 2026-11-14
+
+- **3.6.3 -- New setting: Passthrough Targeting (Settings -> Combat Style & Positioning, off by default).** For servers where a beneficial single-target spell cast while a hostile NPC is targeted lands on that NPC's target. When on, and the intended recipient is already the hostile target's target (`Me.TargetOfTarget`, which needs the Target of Target window; NULL falls back to normal retargeting), spells, AAs and clickies are cast without switching targets (`runtime.castPassesThrough`). The older self-heal-through-a-hostile-target case is unchanged.
+
+- **3.6.3 -- New setting: Retarget After Cast Starts (on by default).** When MCAC has to switch targets to cast, it used to hold the spell's target for the whole cast and restore your previous target only afterwards. It now restores the previous target as soon as the cast bar is up (`Me.Casting` set and 0.3 s after `/cast`; `runtime.releaseTargetAfterCastStart`). Turn it off if your server applies the spell to whoever is targeted when the cast finishes. Debug Diagnostic Logging prints a line for each release.
+
 ## 2026-11-12
 
 - **3.6.2 -- Shift+click any slider to type a value.** Every slider in MCAC and its plugins (core `ImGui.SliderInt` / `SliderFloat` are wrapped once at startup) turns into a text box on shift+click: type the number and press Enter (clamped to the slider's range); click away to cancel. Ctrl+click keeps working. **Floor Height (Z Plane) and Max Height Diff (Z) now go up to 1000** (were 50 and 300), and `/ac zplane` / `/ac huntz` accept up to 1000.
