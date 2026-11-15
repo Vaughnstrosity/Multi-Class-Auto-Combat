@@ -61,7 +61,7 @@ do
         end
     end)
 end
-local VERSION           = '3.7.0'
+local VERSION           = '4.0.0'
 local open              = true
 -- File-backed diagnostic logger. Hooked into print() right away so every
 -- chat line from here on (core and plugins) is captured in its ring buffer;

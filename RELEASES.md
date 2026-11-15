@@ -4,9 +4,9 @@ Short, human-readable notes for each release. The GitHub release page is built
 from the entry that matches the tag (`v3.0` -> `## 3.0`). The full, detailed
 history of every change stays in [CHANGELOG.md](CHANGELOG.md).
 
-## 3.7.0
+## 4.0.0
 
-New **Imm OK** checkbox on spell lines, AAs and clickies. Mobs often report "immune" when they resist only one effect of a spell, and MCAC then stopped casting it on that mob entirely. Tick Imm OK (next to Boss / Burn) to keep casting that spell, AA or clickie regardless; it is off by default and saved per character.
+New **Imm OK** checkbox on spell lines, AAs and clickies. Mobs often report "immune" when they resist only one effect of a spell, and MCAC then stopped casting it on that mob entirely. Tick Imm OK (next to Boss / Burn) to keep casting that spell, AA or clickie regardless; it is off by default and saved per character. The version jumps from 3.6.5 to 4.0.0 so the update checker, which read the old 3.51 as newer than any 3.x.y release, ranks every 4.x release correctly.
 
 ## 3.6.5
 
