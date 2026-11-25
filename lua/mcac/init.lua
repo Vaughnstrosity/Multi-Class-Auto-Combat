@@ -61,7 +61,7 @@ do
         end
     end)
 end
-local VERSION           = '4.0.1'
+local VERSION           = '4.0.2'
 local open              = true
 -- File-backed diagnostic logger. Hooked into print() right away so every
 -- chat line from here on (core and plugins) is captured in its ring buffer;
@@ -1659,22 +1659,50 @@ function runtime.findPetByName(name)
     local lname = string.lower(name)
     local token = name:match('%S+') or name
     local found = nil
+    local function check(s)
+        if not s or not s() then return false end
+        local sid = s.ID() or 0
+        if sid > 0 and string.lower(s.CleanName() or '') == lname
+            and isSpawnAlive(sid) and isSpawnMyPet(s) then
+            found = sid
+            return true
+        end
+        return false
+    end
+    -- 1. Pets we already know: Me.Pet and every tracked ID. The exact CleanName
+    --    comparison below is the only name test, so no search syntax is involved.
     pcall(function()
-        local filter = 'pet name "' .. token .. '"'
-        local count = mq.TLO.SpawnCount(filter)() or 0
-        if count > 12 then count = 12 end
-        for i = 1, count do
-            local s = mq.TLO.NearestSpawn(i, filter)
-            if s and s() then
-                local sid = s.ID() or 0
-                if sid > 0 and string.lower(s.CleanName() or '') == lname
-                    and isSpawnAlive(sid) and isSpawnMyPet(s) then
-                    found = sid
-                    return
-                end
-            end
+        local ids = {}
+        local mp = mq.TLO.Me.Pet.ID() or 0
+        if mp > 0 then ids[#ids + 1] = mp end
+        for _, pid in pairs(petState.myPets) do ids[#ids + 1] = pid end
+        for _, pid in ipairs(ids) do
+            if pid and pid > 0 and check(mq.TLO.Spawn(pid)) then return end
         end
     end)
+    if found then return found end
+    -- 2. Spawn search. The search term is only a pre-filter; MQ matches it against
+    --    its own name field (not necessarily CleanName), so when it finds nothing
+    --    a plain sweep of pet spawns follows, compared by exact CleanName.
+    local function sweep(filter, cap)
+        pcall(function()
+            local count = mq.TLO.SpawnCount(filter)() or 0
+            if count > cap then count = cap end
+            for i = 1, count do
+                if check(mq.TLO.NearestSpawn(i, filter)) then return end
+            end
+        end)
+    end
+    sweep('pet name "' .. token .. '"', 12)
+    if found then return found end
+    -- The wide sweep costs one TLO call per pet in the zone, so a name that is
+    -- not found (pet dead / not summoned yet) retries it at most every 3 s.
+    local now = os.clock()
+    petState.wideSweepAt = petState.wideSweepAt or {}
+    if (now - (petState.wideSweepAt[lname] or -100)) >= 3 then
+        petState.wideSweepAt[lname] = now
+        sweep('pet', 60)
+    end
     return found
 end
 
