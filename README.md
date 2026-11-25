@@ -158,6 +158,6 @@ A plugin is one Lua file in `lua/mcac/` that returns a table with an `id`, a `na
 
 ## Version
 
-Current version: **4.0.0**
+Current version: **7.0.1**
 
 See [CHANGELOG.md](CHANGELOG.md) for what changed in each release.

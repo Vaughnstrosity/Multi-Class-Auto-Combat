@@ -61,7 +61,7 @@ do
         end
     end)
 end
-local VERSION           = '4.0.0'
+local VERSION           = '7.0.1'
 local open              = true
 -- File-backed diagnostic logger. Hooked into print() right away so every
 -- chat line from here on (core and plugins) is captured in its ring buffer;
@@ -465,6 +465,7 @@ local function defaultCtrl()
         retarget_after_cast_start = false,
         pet_names              = {},   -- cls -> pet name learned from that class's last summon (pet names are unique per player on this server)
         pet_names_manual         = {},   -- cls -> pet name the player typed in (Settings -> Pet Names); authoritative: the class's pet is looked up by this name
+        pet_names_reset_v1       = true, -- set once the learned names written by the older tracking (which could pin a name to the wrong class) were cleared
         show_crit_floaters       = true,
         show_cooldowns           = false,
         show_spellbook           = false,
@@ -1732,6 +1733,10 @@ local function trackPet(cls, id, learnName)
     petState.myPets[cls] = id
     petState.lastObservedId = id
     petState.petsCache = nil
+    if ctrl and ctrl.debug_mode and petState.lastDebugTrack ~= cls .. ':' .. id then
+        petState.lastDebugTrack = cls .. ':' .. id
+        print(string.format('\ao[DEBUG pet]\ax tracking #%d "%s" as the %s pet%s', id, spawnCleanName(id), cls, learnName and ' (name learned)' or ''))
+    end
     -- A typed name is authoritative: a summon never overwrites it with a learned one.
     if learnName and not (runtime.manualPetName and runtime.manualPetName(cls)) then
         local nm = spawnCleanName(id)
@@ -1905,6 +1910,37 @@ end
 
 -- Best guess at which trio class a pet spawn belongs to: a name one of our
 -- classes learned from its own summon wins, then the pet's race / name archetype.
+function runtime.trioPetClass(c)
+    if not petState.PET_CLASSES[c] then return false end
+    for _, mc in ipairs(myClasses) do
+        if mc == c then return true end
+    end
+    return false
+end
+
+-- Trio pet class that owns this pet NAME (typed name first, then a name learned
+-- from that class's own summon), or nil. Classes that left the trio never own one.
+function runtime.petNameOwner(name)
+    local c = petClsForName(name)
+    if c and runtime.trioPetClass(c) then return c end
+    return nil
+end
+
+-- The one trio pet class (without a typed name) that has no living pet, or nil
+-- when there is none or more than one. Only then is an unidentified pet
+-- unambiguously that class's.
+function runtime.soleUnpettedClass()
+    local only, n = nil, 0
+    for _, c in ipairs(myClasses) do
+        if petState.PET_CLASSES[c] and not runtime.manualPetName(c) then
+            local pid = petState.myPets[c]
+            if not (pid and pid > 0 and isSpawnAlive(pid)) then only = c; n = n + 1 end
+        end
+    end
+    if n == 1 then return only end
+    return nil
+end
+
 function runtime.detectPetClassFromSpawn(s)
     if not s or not s() then return nil end
     local cname = ''
@@ -1913,20 +1949,59 @@ function runtime.detectPetClassFromSpawn(s)
         cname = string.lower(s.CleanName() or '')
         race = string.lower(s.Race() or '')
     end)
-    local learned = petClsForName(cname)
+    local learned = runtime.petNameOwner(cname)
     if learned then return learned end
     -- Archetype guesses never claim a pet for a class whose pet has a typed
-    -- name: that class is matched by name only.
+    -- name (that class is matched by name only) nor for a class that is not in
+    -- the trio (that pet would then be unassignable to every other class).
     local function guess(c)
+        if not runtime.trioPetClass(c) then return nil end
         if runtime.manualPetName and runtime.manualPetName(c) then return nil end
         return c
     end
     if cname:find('warder', 1, true) then return guess('Bst') end
     if race:find('animation', 1, true) or cname:find('animation', 1, true) then return guess('Enc') end
     if race:find('elemental', 1, true) then return guess('Mag') end
-    if race:find('skeleton', 1, true) or race:find('spectre', 1, true) or race:find('zombie', 1, true) then return guess('Nec') end
+    if race:find('skeleton', 1, true) or race:find('spectre', 1, true) or race:find('zombie', 1, true) then
+        -- Necromancer and Shadow Knight pets look alike; with both in the trio
+        -- the race says nothing, so leave it to names / the summon itself.
+        local nec, sk = runtime.trioPetClass('Nec'), runtime.trioPetClass('SK')
+        if nec and sk then return nil end
+        if nec then return guess('Nec') end
+        if sk then return guess('SK') end
+        return nil
+    end
     if cname:find('spirit wolf', 1, true) then return guess('Shm') end
     return nil
+end
+
+-- False when this pet's name (typed / learned) or, unless nameOnly, its
+-- archetype says it belongs to a DIFFERENT class. A pet that appeared right
+-- after the class's own summon is checked by name only: the archetype is a guess
+-- and must not override what the summon itself just showed.
+function runtime.petNotClaimedByOther(pid, cls, nameOnly)
+    if not pid or pid <= 0 then return false end
+    local owner = runtime.petNameOwner(spawnCleanName(pid))
+    if owner and owner ~= cls then return false end
+    if nameOnly then return true end
+    local det = nil
+    pcall(function()
+        local s = mq.TLO.Spawn(pid)
+        if s and s() then det = runtime.detectPetClassFromSpawn(s) end
+    end)
+    if det and det ~= cls then return false end
+    return true
+end
+
+-- Is `pid` a pet that appeared after the summon began? A pet outside the
+-- snapshot radius is not provably new (it was never in the snapshot), so it
+-- does not count.
+function runtime.petNewSinceSummon(pid, sp)
+    if not sp or not sp.snapshot or sp.snapshot[pid] then return false end
+    local dist = 9999
+    pcall(function() dist = mq.TLO.Spawn(pid).Distance() or 9999 end)
+    local radius = runtime.tune and runtime.tune('pet_snapshot_radius') or 100
+    return dist <= radius
 end
 
 -- May untracked pet `pid` become `cls`'s primary pet? Only when it is Me.Pet,
@@ -1936,22 +2011,29 @@ end
 -- being pinned to whichever class happens to have no pet.
 function runtime.petEligibleForCls(pid, cls, mePetId)
     if not pid or pid <= 0 or not cls then return false end
-    -- A class with a typed pet name only ever gets the pet that carries it.
+    local nm = ''
+    pcall(function() nm = mq.TLO.Spawn(pid).CleanName() or '' end)
+    -- 1. A class with a typed pet name only ever gets the pet that carries it.
     local typed = runtime.manualPetName and runtime.manualPetName(cls)
-    if typed then
-        local nm = ''
-        pcall(function() nm = mq.TLO.Spawn(pid).CleanName() or '' end)
-        return string.lower(nm) == string.lower(typed)
-    end
-    if mePetId and mePetId > 0 and pid == mePetId then return true end
+    if typed then return string.lower(nm) == string.lower(typed) end
+    -- 2. A name another class (typed or learned) owns is never this class's.
+    local owner = runtime.petNameOwner(nm)
+    if owner then return owner == cls end
+    -- 3. Pet archetype (race / name).
     local det = nil
     pcall(function()
         local s = mq.TLO.Spawn(pid)
         if s and s() then det = runtime.detectPetClassFromSpawn(s) end
     end)
     if det then return det == cls end
+    -- 4. A pet that appeared after this class began a summon.
     local sp = petState.summonPending
-    if sp and sp.cls == cls and not (sp.snapshot and sp.snapshot[pid]) then return true end
+    if sp and sp.cls == cls and runtime.petNewSinceSummon(pid, sp) then return true end
+    -- 5. Last resort: Me.Pet, but only when this is the one pet class without a
+    --    pet, so the choice is unambiguous. Never "the first class without one".
+    if mePetId and mePetId > 0 and pid == mePetId then
+        return runtime.soleUnpettedClass() == cls
+    end
     return false
 end
 
@@ -2144,14 +2226,13 @@ local function updatePetTracking()
     end
     if sp then
         local found = nil
-        -- 1. a living pet of ours that nobody tracks yet
+        -- 1. a living pet of ours that nobody tracks, that appeared after the
+        --    cast began, and whose name / archetype no other class claims.
+        --    There is no "any untracked pet" fallback: that pinned another
+        --    class's pet (and its name) to the casting class.
         for _, pid in ipairs(getAllMyPets()) do
-            if not petTrackedCls(pid) and not sp.snapshot[pid] then found = pid break end
-        end
-        if not found then
-            for _, pid in ipairs(getAllMyPets()) do
-                if not petTrackedCls(pid) then found = pid break end
-            end
+            if not petTrackedCls(pid) and runtime.petNewSinceSummon(pid, sp)
+                and runtime.petNotClaimedByOther(pid, sp.cls, true) then found = pid break end
         end
         -- 2. master could not be resolved (MQ types it Pet but Master() is empty):
         --    a brand-new pet spawn right next to us that nobody else owns
@@ -2162,7 +2243,8 @@ local function updatePetTracking()
                 for i = 1, count do
                     local s = mq.TLO.NearestSpawn(i, filter)
                     local sid = s and s() and (s.ID() or 0) or 0
-                    if sid > 0 and not sp.snapshot[sid] and not petTrackedCls(sid) and isSpawnAlive(sid) then
+                    if sid > 0 and not sp.snapshot[sid] and not petTrackedCls(sid) and isSpawnAlive(sid)
+                        and runtime.petNotClaimedByOther(sid, sp.cls, true) then
                         local foreign = false
                         local m = s.Master
                         if m and m() and (m.ID() or 0) > 0 and (m.ID() or 0) ~= (mq.TLO.Me.ID() or 0) then foreign = true end
@@ -2188,18 +2270,19 @@ local function updatePetTracking()
     local curPetId = 0
     pcall(function() curPetId = mq.TLO.Me.Pet.ID() or 0 end)
     if curPetId > 0 and curPetId ~= petState.lastObservedId then
-        if not petTrackedCls(curPetId) then
-            local cls = sp and sp.cls or nil
+        -- While a summon is pending the summon resolution above owns the
+        -- assignment; otherwise identify the pet by name, then archetype, then
+        -- "the only class without a pet". Never "the first class without one".
+        if not petTrackedCls(curPetId) and not petState.summonPending then
+            local cls = runtime.petNameOwner(spawnCleanName(curPetId))
             if not cls then
-                for _, c in ipairs(myClasses) do
-                    if petState.PET_CLASSES[c] and not runtime.manualPetName(c)
-                        and (not petState.myPets[c] or not isSpawnAlive(petState.myPets[c])) then
-                        cls = c
-                        break
-                    end
-                end
+                pcall(function()
+                    local s = mq.TLO.Spawn(curPetId)
+                    if s and s() then cls = runtime.detectPetClassFromSpawn(s) end
+                end)
             end
-            if cls then trackPet(cls, curPetId, false) end
+            if not cls then cls = runtime.soleUnpettedClass() end
+            if cls and petState.PET_CLASSES[cls] then trackPet(cls, curPetId, false) end
         end
         petState.lastObservedId = curPetId
     elseif curPetId == 0 then
@@ -2223,20 +2306,37 @@ local function onPetSummonRefused()
             sp.cls, runtime.manualPetName(sp.cls), sp.cls, backoffSec))
         return
     end
+    -- 1. Exactly one living pet of ours that no class tracks and no other class
+    --    claims: the server says this class has a pet, so it is that one.
+    local cands = {}
+    for _, pid in ipairs(getAllMyPets()) do
+        if not petTrackedCls(pid) and runtime.petNotClaimedByOther(pid, sp.cls) then cands[#cands + 1] = pid end
+    end
+    if #cands == 1 then
+        trackPet(sp.cls, cands[1], true)
+        print(string.format('\ay[MCAC]\ax server says %s already has a pet -- now tracking "%s" as the %s pet.', sp.cls, spawnCleanName(cands[1]), sp.cls))
+        return
+    end
+    -- 2. Otherwise a tracked pet whose class has not confirmed it by name, but
+    --    only when there is exactly one such pet (no guessing between several).
     local names = (type(ctrl.pet_names) == 'table') and ctrl.pet_names or {}
+    local handover = {}
     for _, c in ipairs(myClasses) do
         local pid = petState.myPets[c]
         -- never take the pet of a class whose pet name was typed in
         if c ~= sp.cls and pid and isSpawnAlive(pid) and not runtime.manualPetName(c) then
             local nm = spawnCleanName(pid)
-            if not names[c] or string.lower(names[c]) ~= string.lower(nm) then
-                trackPet(sp.cls, pid, true)
-                print(string.format('\ay[MCAC]\ax server says %s already has a pet -- now tracking "%s" as the %s pet.', sp.cls, nm, sp.cls))
-                return
+            if (not names[c] or string.lower(names[c]) ~= string.lower(nm)) and runtime.petNotClaimedByOther(pid, sp.cls) then
+                handover[#handover + 1] = pid
             end
         end
     end
-    print(string.format('\ay[MCAC]\ax server says %s already has a pet but none was detected -- pausing %s pet summons for %ds.', sp.cls, sp.cls, backoffSec))
+    if #handover == 1 then
+        trackPet(sp.cls, handover[1], false)
+        print(string.format('\ay[MCAC]\ax server says %s already has a pet -- now tracking "%s" as the %s pet.', sp.cls, spawnCleanName(handover[1]), sp.cls))
+        return
+    end
+    print(string.format('\ay[MCAC]\ax server says %s already has a pet but it could not be told apart from your other pets -- pausing %s pet summons for %ds. Type the pet names under Settings -> Pet Names.', sp.cls, sp.cls, backoffSec))
 end
 
 -- 'missing pet' gem condition: does this gem's class need to summon?
@@ -5834,6 +5934,15 @@ function runtime.applyEntry(e)
         if ctrl.winpos_restore_visibility == nil then ctrl.winpos_restore_visibility = false end
         if type(ctrl.plugins) ~= 'table' then ctrl.plugins = {} end
         if type(ctrl.scripts) ~= 'table' then ctrl.scripts = {} end
+        -- One-time: drop the learned pet names saved by older versions, whose
+        -- tracking could pin another class's pet (and its name) to the wrong
+        -- class. Typed names are untouched; real names are re-learned from the
+        -- next summon of each class.
+        if e.control.pet_names_reset_v1 ~= true then
+            ctrl.pet_names = {}
+            ctrl.pet_names_reset_v1 = true
+            runtime.autoDirty = true
+        end
         -- The combat anchor location is a zone-specific position (like camp_loc): never
         -- restore it from a saved file as-is, the player may well be in another
         -- zone. The per-zone list (zone_anchors) supplies the one for the zone we
