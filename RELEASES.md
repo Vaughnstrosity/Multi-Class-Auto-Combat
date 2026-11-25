@@ -4,9 +4,9 @@ Short, human-readable notes for each release. The GitHub release page is built
 from the entry that matches the tag (`v3.0` -> `## 3.0`). The full, detailed
 history of every change stays in [CHANGELOG.md](CHANGELOG.md).
 
-## 7.0.1
+## 4.0.1
 
-Bug-fix release for pets getting mixed up between pet classes. Several paths could pin one class's pet to another class (and save the wrong name for it): a summon fell back to "any untracked pet", and `Me.Pet`, reconcile and a refused summon handed an unidentified pet to the first pet class without one. Pets are now assigned by one order: typed name, learned name, pet type, "appeared after this class's own summon", and only then `Me.Pet` when exactly one pet class lacks a pet. A name another class owns is never taken, and a pet MCAC cannot identify stays an extra pet instead of being guessed onto a class (type its name under Settings -> Pet Names). Skeleton/spectre/zombie pets read as Nec or SK depending on your trio. The learned pet names saved by earlier versions are cleared once on load (typed names are kept) and re-learned from each class's next summon. Debug mode prints which class each pet is assigned to. Versions 5 and 6 were skipped; the number jumps from 4.0.0 to 7.0.1.
+Bug-fix release for pets getting mixed up between pet classes. Several paths could pin one class's pet to another class (and save the wrong name for it): a summon fell back to "any untracked pet", and `Me.Pet`, reconcile and a refused summon handed an unidentified pet to the first pet class without one. Pets are now assigned by one order: typed name, learned name, pet type, "appeared after this class's own summon", and only then `Me.Pet` when exactly one pet class lacks a pet. A name another class owns is never taken, and a pet MCAC cannot identify stays an extra pet instead of being guessed onto a class (type its name under Settings -> Pet Names). Skeleton/spectre/zombie pets read as Nec or SK depending on your trio. The learned pet names saved by earlier versions are cleared once on load (typed names are kept) and re-learned from each class's next summon. Debug mode prints which class each pet is assigned to.
 
 ## 4.0.0
 
